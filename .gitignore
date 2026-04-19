@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.parcel-cache/
+.sixth/
+portable-git/
+gh-cli/
+Retail-Shopkeeper-App-current-code/
+
+*.log
+*.zip
+gh-windows-amd64.zip
+*.7z.exe
+
+.env
+.env.*
+!.env.example
