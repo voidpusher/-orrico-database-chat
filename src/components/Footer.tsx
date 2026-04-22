@@ -74,7 +74,7 @@ export function Footer() {
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MapPin className="w-4 h-4" />
-                <span>Mumbai, India</span>
+                <span>Dwarka, Delhi, India</span>
               </div>
             </div>
           </div>
@@ -103,7 +103,7 @@ export function Footer() {
 
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-muted-foreground">
-            © 2025 Orrico AI. All rights reserved.
+            © 2025 Orrico AI..
           </p>
           <div className="flex items-center gap-6">
             <a
