@@ -1,11 +1,11 @@
-// Footer.tsx file content with updated phone number
+import React from 'react';
 
 const Footer = () => {
-  return (
-    <footer>
-      <p>Contact us at +91 9871079999</p>
-    </footer>
-  );
+    return (
+        <footer>
+            <p>Contact us: +91 9871074567</p>
+        </footer>
+    );
 };
 
 export default Footer;
