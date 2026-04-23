@@ -104,7 +104,10 @@ export function AuthPage({
 
   const loginForm = useForm<LoginForm>();
   const signupForm = useForm<SignupForm>();
-  const googleClientId = process.env.GOOGLE_CLIENT_ID || "";
+  const googleClientId =
+    process.env.GOOGLE_CLIENT_ID ||
+    process.env.VITE_GOOGLE_CLIENT_ID ||
+    "";
 
   const decodeGoogleCredential = (
     credential: string,
