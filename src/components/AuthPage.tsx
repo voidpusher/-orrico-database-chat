@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   Card,
@@ -26,6 +26,46 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import shopkeeperImage from "../assets/2609b7d59d0b4c5c57d1b7fab24a98ad05088a2f.png";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: GoogleCredentialResponse) => void;
+            auto_select?: boolean;
+          }) => void;
+          renderButton: (
+            parent: HTMLElement,
+            options: {
+              theme?: "outline" | "filled_blue" | "filled_black";
+              size?: "large" | "medium" | "small";
+              text?: "signin_with" | "signup_with" | "continue_with";
+              shape?: "rectangular" | "pill" | "circle" | "square";
+              width?: number;
+            },
+          ) => void;
+        };
+      };
+    };
+  }
+}
+
+interface GoogleCredentialResponse {
+  credential?: string;
+  select_by?: string;
+}
+
+interface GoogleUserProfile {
+  sub: string;
+  email?: string;
+  given_name?: string;
+  family_name?: string;
+  name?: string;
+  picture?: string;
+}
 
 interface LoginForm {
   email: string;
@@ -59,9 +99,151 @@ export function AuthPage({
   const [showConfirmPassword, setShowConfirmPassword] =
     useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
 
   const loginForm = useForm<LoginForm>();
   const signupForm = useForm<SignupForm>();
+  const googleClientId = process.env.GOOGLE_CLIENT_ID || "";
+
+  const decodeGoogleCredential = (
+    credential: string,
+  ): GoogleUserProfile => {
+    const payload = credential.split(".")[1];
+    const decodedPayload = atob(
+      payload.replace(/-/g, "+").replace(/_/g, "/"),
+    );
+    const jsonPayload = decodeURIComponent(
+      decodedPayload
+        .split("")
+        .map((character) => {
+          return `%${`00${character.charCodeAt(0).toString(16)}`.slice(-2)}`;
+        })
+        .join(""),
+    );
+
+    return JSON.parse(jsonPayload);
+  };
+
+  const handleGoogleCredential = (
+    response: GoogleCredentialResponse,
+  ) => {
+    if (!response.credential) {
+      toast.error("Google sign-in did not return a credential.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const profile = decodeGoogleCredential(response.credential);
+
+      if (!profile.email) {
+        throw new Error("Google profile is missing an email address.");
+      }
+
+      const existingUsers = JSON.parse(
+        localStorage.getItem("orrico_users") || "[]",
+      );
+      const existingUser = existingUsers.find(
+        (user: any) => user.email === profile.email,
+      );
+      const googleUser = existingUser || {
+        id: `google_${profile.sub}`,
+        firstName:
+          profile.given_name || profile.name?.split(" ")[0] || "Google",
+        lastName:
+          profile.family_name ||
+          profile.name?.split(" ").slice(1).join(" ") ||
+          "User",
+        email: profile.email,
+        businessName: "Google Account",
+        avatarUrl: profile.picture,
+        authProvider: "google",
+        createdAt: new Date().toISOString(),
+      };
+
+      if (!existingUser) {
+        existingUsers.push(googleUser);
+        localStorage.setItem(
+          "orrico_users",
+          JSON.stringify(existingUsers),
+        );
+      }
+
+      localStorage.setItem(
+        "orrico_current_user",
+        JSON.stringify(googleUser),
+      );
+      localStorage.setItem(
+        "orrico_auth_token",
+        `google_authenticated_${Date.now()}`,
+      );
+
+      toast.success(
+        "Signed in with Google. Redirecting to your dashboard...",
+      );
+      setTimeout(() => {
+        onLogin?.();
+      }, 700);
+    } catch (error) {
+      toast.error("Google sign-in failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!googleClientId) {
+      return;
+    }
+
+    const existingScript = document.querySelector(
+      'script[src="https://accounts.google.com/gsi/client"]',
+    );
+
+    const initializeGoogle = () => {
+      if (!window.google?.accounts?.id) {
+        return;
+      }
+
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleCredential,
+        auto_select: false,
+      });
+      setGoogleReady(true);
+    };
+
+    if (existingScript) {
+      initializeGoogle();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogle;
+    script.onerror = () => {
+      toast.error("Google sign-in could not be loaded.");
+    };
+    document.head.appendChild(script);
+  }, [googleClientId]);
+
+  useEffect(() => {
+    if (!googleReady || !googleButtonRef.current) {
+      return;
+    }
+
+    googleButtonRef.current.innerHTML = "";
+    window.google?.accounts.id.renderButton(googleButtonRef.current, {
+      theme: "outline",
+      size: "large",
+      text: isLogin ? "signin_with" : "signup_with",
+      shape: "rectangular",
+      width: 192,
+    });
+  }, [googleReady, isLogin]);
 
   const onLoginSubmit = async (data: LoginForm) => {
     setIsLoading(true);
@@ -731,10 +913,23 @@ export function AuthPage({
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                    >
+                    {googleClientId ? (
+                      <div
+                        ref={googleButtonRef}
+                        className="min-h-10 overflow-hidden [&>div]:mx-auto"
+                      />
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        disabled={isLoading}
+                        onClick={() =>
+                          toast.error(
+                            "Add GOOGLE_CLIENT_ID to enable Google sign-in.",
+                          )
+                        }
+                      >
                       <svg
                         className="w-4 h-4 mr-2"
                         viewBox="0 0 24 24"
@@ -757,8 +952,10 @@ export function AuthPage({
                         />
                       </svg>
                       Google
-                    </Button>
+                      </Button>
+                    )}
                     <Button
+                      type="button"
                       variant="outline"
                       className="w-full"
                     >
