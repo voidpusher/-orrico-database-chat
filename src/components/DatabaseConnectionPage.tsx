@@ -375,7 +375,7 @@ export function DatabaseConnectionPage({
                         <Label htmlFor="host">Host</Label>
                         <Input
                           id="host"
-                          placeholder="localhost or IP address"
+                          placeholder="localhost ya server IP"
                           {...form.register("host", {
                             required: "Host is required",
                           })}

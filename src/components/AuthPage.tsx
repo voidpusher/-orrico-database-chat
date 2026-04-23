@@ -457,7 +457,7 @@ export function AuthPage({
                         <Input
                           id="email"
                           type="email"
-                          placeholder="you@yourstore.com"
+                          placeholder="owner@dukaan.in"
                           className="pl-10"
                           {...loginForm.register("email", {
                             required: "Email is required",
@@ -578,7 +578,7 @@ export function AuthPage({
                         </Label>
                         <Input
                           id="firstName"
-                          placeholder="John"
+                          placeholder="Arjun"
                           {...signupForm.register("firstName", {
                             required: "First name is required",
                           })}
@@ -599,7 +599,7 @@ export function AuthPage({
                         </Label>
                         <Input
                           id="lastName"
-                          placeholder="Doe"
+                          placeholder="Sharma"
                           {...signupForm.register("lastName", {
                             required: "Last name is required",
                           })}
@@ -625,7 +625,7 @@ export function AuthPage({
                         <Input
                           id="email"
                           type="email"
-                          placeholder="you@yourstore.com"
+                          placeholder="owner@dukaan.in"
                           className="pl-10"
                           {...signupForm.register("email", {
                             required: "Email is required",
@@ -654,7 +654,7 @@ export function AuthPage({
                         <Building2 className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="businessName"
-                          placeholder="Your Store Name"
+                          placeholder="Sharma Electronics"
                           className="pl-10"
                           {...signupForm.register(
                             "businessName",

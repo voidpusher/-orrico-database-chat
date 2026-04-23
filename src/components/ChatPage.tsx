@@ -908,8 +908,8 @@ export function ChatPage({
                     <AvatarFallback>JS</AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium">Jai's Electronics</p>
-              <p className="text-sm text-muted-foreground">Premium Plan</p>
+              <p className="font-medium">Gupta Electronics</p>
+              <p className="text-sm text-muted-foreground">Vyapar Pro</p>
             </div>
           </div>
         </div>
@@ -1100,8 +1100,8 @@ export function ChatPage({
                   }}
                   placeholder={
                     hasSpeechSupport
-                      ? "Ask me about your business data or use the mic..."
-                      : "Ask me about your business data..."
+                      ? "Apne business data ke baare mein puchhiye ya mic use kijiye..."
+                      : "Apne business data ke baare mein puchhiye..."
                   }
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {

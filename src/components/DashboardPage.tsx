@@ -776,7 +776,7 @@ export function DashboardPage({
     } else {
       // Create new walk-in customer
       const newCustomerNames = [
-        "Walk-in Customer",
+        "Store Customer",
         "Anil Verma",
         "Pooja Singh",
         "Rajesh Mehta",
@@ -1177,9 +1177,9 @@ export function DashboardPage({
               <AvatarFallback>JS</AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium">Jai's Electronics</p>
+              <p className="font-medium">Gupta Electronics</p>
               <p className="text-sm text-muted-foreground">
-                Premium Plan
+                Vyapar Pro
               </p>
             </div>
           </div>
@@ -2037,7 +2037,7 @@ export function DashboardPage({
                   <Input
                     id="newCustomerEmail"
                     type="email"
-                    placeholder="customer@email.com"
+                    placeholder="customer@dukaan.in"
                     value={newOrder.customerEmail}
                     onChange={(e) =>
                       setNewOrder({ ...newOrder, customerEmail: e.target.value })
@@ -2155,11 +2155,11 @@ export function DashboardPage({
             <TabsContent value="account" className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="shopName">Shop Name</Label>
-                <Input id="shopName" defaultValue="Jai's Electronics" />
+                <Input id="shopName" defaultValue="Gupta Electronics" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ownerName">Owner Name</Label>
-                <Input id="ownerName" defaultValue="Jai Sharma" />
+                <Input id="ownerName" defaultValue="Arjun Sharma" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="settingsEmail">Email</Label>
