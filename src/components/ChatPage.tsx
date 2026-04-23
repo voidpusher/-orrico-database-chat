@@ -13,7 +13,6 @@ import {
 import { toast } from "sonner";
 import {
   CHAT_INTENTS,
-  CHAT_INTENT_QUESTION_COUNT,
   type IntentDefinition,
 } from "../data/chatIntents";
 import { Logo } from "./Logo";
@@ -1000,9 +999,6 @@ export function ChatPage({
               <h1 className="text-2xl font-semibold">{ASSISTANT_FULL_NAME}</h1>
               <p className="text-muted-foreground">
                 Ask {ASSISTANT_NAME} anything about your business data
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Trained on {CHAT_INTENT_QUESTION_COUNT} business question examples
               </p>
             </div>
             <div className="flex items-center gap-2">
