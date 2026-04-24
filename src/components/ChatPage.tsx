@@ -704,10 +704,13 @@ export function ChatPage({
 
     try {
       const result = await api.sendChatMessage(message);
+      const responseContent = result.sql
+        ? `${result.reply}\n\nSQL executed:\n${result.sql}`
+        : result.reply;
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: "ai",
-        content: result.reply,
+        content: responseContent,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiMessage]);

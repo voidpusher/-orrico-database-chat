@@ -1,5 +1,22 @@
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:4000/api";
 
+export interface ChatMessageResponse {
+  reply: string;
+  sql: string | null;
+  rows: Record<string, unknown>[];
+  mode: string;
+}
+
+export interface CsvImportResponse {
+  databasePath: string;
+  tableName: string;
+  rowCount: number;
+  columns: Array<{
+    name: string;
+    type: string;
+  }>;
+}
+
 interface RequestOptions extends RequestInit {
   authenticated?: boolean;
 }
@@ -70,6 +87,11 @@ export const api = {
       authenticated: true,
     });
   },
+  databaseSchema() {
+    return request("/database/schema", {
+      authenticated: true,
+    });
+  },
   saveDatabaseConnection(payload: Record<string, unknown>) {
     return request("/database/connect", {
       method: "POST",
@@ -77,11 +99,22 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
-  sendChatMessage(message: string) {
+  importCsvDataset(payload: {
+    csvContent: string;
+    fileName: string;
+    tableName?: string;
+  }): Promise<CsvImportResponse> {
+    return request("/database/import-csv", {
+      method: "POST",
+      authenticated: true,
+      body: JSON.stringify(payload),
+    }) as Promise<CsvImportResponse>;
+  },
+  sendChatMessage(message: string): Promise<ChatMessageResponse> {
     return request("/chat/message", {
       method: "POST",
       authenticated: true,
       body: JSON.stringify({ message }),
-    });
+    }) as Promise<ChatMessageResponse>;
   },
 };

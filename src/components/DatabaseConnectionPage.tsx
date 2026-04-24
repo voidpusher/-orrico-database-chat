@@ -108,6 +108,13 @@ export function DatabaseConnectionPage({
   const [isLoading, setIsLoading] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [existingConnection, setExistingConnection] = useState<any>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvTableName, setCsvTableName] = useState("");
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [lastImportResult, setLastImportResult] = useState<{
+    tableName: string;
+    rowCount: number;
+  } | null>(null);
   const currentUser = JSON.parse(
     localStorage.getItem("orrico_current_user") || "{}",
   );
@@ -233,6 +240,40 @@ export function DatabaseConnectionPage({
     setTimeout(() => {
       onComplete();
     }, 500);
+  };
+
+  const importCsvFile = async () => {
+    if (!csvFile) {
+      toast.error("Select a CSV file first.");
+      return;
+    }
+
+    setIsImportingCsv(true);
+
+    try {
+      const csvContent = await csvFile.text();
+      const result = await api.importCsvDataset({
+        csvContent,
+        fileName: csvFile.name,
+        tableName: csvTableName,
+      });
+
+      setLastImportResult({
+        tableName: result.tableName,
+        rowCount: result.rowCount,
+      });
+      setCsvTableName(result.tableName);
+      form.setValue("databaseName", form.getValues("databaseName") || "imported_retail_data");
+      toast.success(
+        `Imported ${result.rowCount} rows into ${result.tableName}. You can query it from chat now.`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "CSV import failed.",
+      );
+    } finally {
+      setIsImportingCsv(false);
+    }
   };
 
   return (
@@ -519,6 +560,62 @@ export function DatabaseConnectionPage({
                           }
                         }}
                       />
+                    </div>
+
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                      <div className="space-y-1">
+                        <h4 className="font-medium">Import CSV Data</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Upload business data as CSV and Orrico will create a SQLite
+                          table that chat can query directly.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="csvTableName">Table Name</Label>
+                          <Input
+                            id="csvTableName"
+                            placeholder="sales_april"
+                            value={csvTableName}
+                            onChange={(event) =>
+                              setCsvTableName(event.target.value)
+                            }
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="csvImportFile">CSV File</Label>
+                          <Input
+                            id="csvImportFile"
+                            type="file"
+                            accept=".csv,text/csv"
+                            onChange={(event) =>
+                              setCsvFile(event.target.files?.[0] || null)
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={importCsvFile}
+                        disabled={isImportingCsv}
+                        className="w-full"
+                      >
+                        {isImportingCsv ? "Importing CSV..." : "Import CSV into SQLite"}
+                      </Button>
+
+                      {lastImportResult && (
+                        <Alert className="bg-green-50 border-green-200">
+                          <AlertDescription className="text-sm">
+                            Imported <strong>{lastImportResult.rowCount}</strong> rows
+                            into <strong>{lastImportResult.tableName}</strong>. Ask chat
+                            about this table or inspect the schema to explore the data.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
                   </div>
                 )}

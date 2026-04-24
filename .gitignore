@@ -17,3 +17,5 @@ gh-windows-amd64.zip
 
 .vercel
 server/data/*.json
+server/data/*.sqlite
+server/data/*.db

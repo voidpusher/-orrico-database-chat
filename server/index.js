@@ -2,6 +2,10 @@ import cors from "cors";
 import express from "express";
 import crypto from "node:crypto";
 import { buildChatReply } from "./chat-engine.js";
+import {
+  getSchemaOverview,
+  importCsvDataset,
+} from "./demo-retail-db.js";
 import { readData, writeData } from "./data-store.js";
 
 const app = express();
@@ -261,6 +265,36 @@ app.get("/api/database/current", (request, response) => {
   response.json({ connection: connection || null });
 });
 
+app.get("/api/database/schema", (request, response) => {
+  const session = getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  if (
+    connection &&
+    connection.databaseType &&
+    connection.databaseType !== "sqlite" &&
+    !connection.isDemoConnection
+  ) {
+    response.status(400).json({
+      error:
+        "Schema inspection is currently available for the demo SQLite database and SQLite file connections.",
+    });
+    return;
+  }
+
+  const overview = getSchemaOverview(connection);
+  response.json(overview);
+});
+
 app.post("/api/database/connect", (request, response) => {
   const session = getSessionFromRequest(request);
 
@@ -286,6 +320,57 @@ app.post("/api/database/connect", (request, response) => {
   response.json({ connection: nextConnection });
 });
 
+app.post("/api/database/import-csv", (request, response) => {
+  const session = getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  if (
+    connection &&
+    connection.databaseType &&
+    connection.databaseType !== "sqlite" &&
+    !connection.isDemoConnection
+  ) {
+    response.status(400).json({
+      error:
+        "CSV import is currently available for the demo SQLite database and SQLite file connections.",
+    });
+    return;
+  }
+
+  const { csvContent, tableName, fileName } = request.body || {};
+
+  if (!csvContent || !String(csvContent).trim()) {
+    response.status(400).json({ error: "CSV content is required." });
+    return;
+  }
+
+  try {
+    const result = importCsvDataset(connection, {
+      csvContent: String(csvContent),
+      tableName: String(tableName || ""),
+      fileName: String(fileName || ""),
+    });
+
+    response.status(201).json(result);
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "CSV import failed.",
+    });
+  }
+});
+
 app.post("/api/chat/message", (request, response) => {
   const session = getSessionFromRequest(request);
 
@@ -301,9 +386,13 @@ app.post("/api/chat/message", (request, response) => {
     return;
   }
 
-  response.json({
-    reply: buildChatReply(String(message)),
-  });
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+  const result = buildChatReply(String(message), { connection });
+
+  response.json(result);
 });
 
 app.listen(port, () => {
