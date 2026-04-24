@@ -3,6 +3,7 @@ import {
   BarChart3,
   HelpCircle,
   LogOut,
+  Menu,
   Mic,
   MicOff,
   Send,
@@ -22,6 +23,7 @@ import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
+import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 
@@ -515,6 +517,7 @@ export function ChatPage({
   const [isTyping, setIsTyping] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const [hasSpeechSupport, setHasSpeechSupport] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const inputValueRef = useRef("");
   const interimTranscriptRef = useRef("");
@@ -561,6 +564,131 @@ export function ChatPage({
     .filter(Boolean)
     .join(" ")
     .trim();
+
+  const renderSidebarContent = (mobile = false) => (
+    <>
+      <div className="border-b p-6">
+        <Logo
+          iconClassName="h-6 w-6"
+          className="mb-4"
+          onClick={onNavigateToLanding}
+          clickable={!!onNavigateToLanding}
+        />
+        <div className="flex items-center gap-2">
+          <Avatar className="h-8 w-8">
+            <AvatarFallback>JS</AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="font-medium">Gupta Electronics</p>
+            <p className="text-sm text-muted-foreground">Vyapar Pro</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-b p-6">
+        <h3 className="mb-3 font-medium">Today's Overview</h3>
+        <div className="space-y-3">
+          {quickStats.map((stat, index) => (
+            <div key={index} className="flex items-center justify-between gap-3">
+              <span className="text-sm text-muted-foreground">
+                {stat.label}
+              </span>
+              <div className="text-right">
+                <p className="font-medium">{stat.value}</p>
+                <Badge
+                  variant={stat.positive ? "default" : "secondary"}
+                  className="text-xs"
+                >
+                  {stat.change}
+                </Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        <h3 className="mb-3 font-medium">Quick Questions</h3>
+        <div className="space-y-2">
+          {quickQuestions.map((question, index) => (
+            <Button
+              key={index}
+              variant="ghost"
+              size="sm"
+              className="h-auto w-full justify-start p-2 text-left"
+              onClick={() => {
+                if (isRecording && recognitionRef.current) {
+                  shouldSendAfterRecordingRef.current = false;
+                  manualStopRef.current = true;
+                  recognitionRef.current.stop();
+                }
+                if (mobile) {
+                  setIsMobileSidebarOpen(false);
+                }
+                handleSendMessage(question);
+              }}
+            >
+              <span className="text-xs">{question}</span>
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2 border-t p-6">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          onClick={() => {
+            if (mobile) {
+              setIsMobileSidebarOpen(false);
+            }
+            onNavigateToDashboard();
+          }}
+        >
+          <BarChart3 className="mr-2 h-4 w-4" />
+          Dashboard
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          onClick={() => {
+            if (mobile) {
+              setIsMobileSidebarOpen(false);
+            }
+            onNavigateToSupport();
+          }}
+        >
+          <HelpCircle className="mr-2 h-4 w-4" />
+          Support
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          onClick={handleSettings}
+        >
+          <Settings className="mr-2 h-4 w-4" />
+          Settings
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          onClick={() => {
+            if (mobile) {
+              setIsMobileSidebarOpen(false);
+            }
+            onLogout();
+          }}
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Logout
+        </Button>
+      </div>
+    </>
+  );
 
   const scrollToBottom = () => {
     const viewport = scrollAreaRef.current?.querySelector(
@@ -898,122 +1026,32 @@ export function ChatPage({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <div className="flex w-80 shrink-0 flex-col overflow-hidden border-r bg-muted/20">
-        <div className="border-b p-6">
-          <Logo
-            iconClassName="h-6 w-6"
-            className="mb-4"
-            onClick={onNavigateToLanding}
-            clickable={!!onNavigateToLanding}
-          />
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback>JS</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-medium">Gupta Electronics</p>
-              <p className="text-sm text-muted-foreground">Vyapar Pro</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-b p-6">
-          <h3 className="mb-3 font-medium">Today's Overview</h3>
-          <div className="space-y-3">
-            {quickStats.map((stat, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  {stat.label}
-                </span>
-                <div className="text-right">
-                  <p className="font-medium">{stat.value}</p>
-                  <Badge
-                    variant={stat.positive ? "default" : "secondary"}
-                    className="text-xs"
-                  >
-                    {stat.change}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <h3 className="mb-3 font-medium">Quick Questions</h3>
-          <div className="space-y-2">
-            {quickQuestions.map((question, index) => (
-              <Button
-                key={index}
-                variant="ghost"
-                size="sm"
-                className="h-auto w-full justify-start p-2 text-left"
-                onClick={() => {
-                  if (isRecording && recognitionRef.current) {
-                    shouldSendAfterRecordingRef.current = false;
-                    manualStopRef.current = true;
-                    recognitionRef.current.stop();
-                  }
-                  handleSendMessage(question);
-                }}
-              >
-                <span className="text-xs">{question}</span>
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-2 border-t p-6">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
-            onClick={onNavigateToDashboard}
-          >
-            <BarChart3 className="mr-2 h-4 w-4" />
-            Dashboard
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
-            onClick={onNavigateToSupport}
-          >
-            <HelpCircle className="mr-2 h-4 w-4" />
-            Support
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
-            onClick={handleSettings}
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            Settings
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
-            onClick={onLogout}
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
-        </div>
+      <div className="hidden md:flex md:w-80 md:shrink-0 md:flex-col md:overflow-hidden md:border-r md:bg-muted/20">
+        {renderSidebarContent()}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="shrink-0 border-b bg-background p-6">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="mb-3 flex items-center gap-2 md:hidden">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  aria-label="Open chat menu"
+                >
+                  <Menu className="h-4 w-4" />
+                </Button>
+                <ThemeToggle />
+              </div>
               <h1 className="text-2xl font-semibold">{ASSISTANT_FULL_NAME}</h1>
               <p className="text-muted-foreground">
                 Ask {ASSISTANT_NAME} anything about your business data
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="flex items-center gap-1">
+            <div className="hidden items-center gap-2 md:flex">
+              <Badge variant="secondary" className="flex items-center gap-1 whitespace-nowrap">
                 <Zap className="h-3 w-3" />
                 Connected
               </Badge>
@@ -1049,14 +1087,14 @@ export function ChatPage({
                   </AvatarFallback>
                 </Avatar>
                 <Card
-                  className={`max-w-[80%] ${
+                  className={`max-w-[88%] sm:max-w-[80%] ${
                     message.type === "user"
                       ? "bg-primary text-primary-foreground"
                       : ""
                   }`}
                 >
                   <CardContent className="p-4">
-                    <p className="whitespace-pre-wrap">{message.content}</p>
+                    <p className="break-words whitespace-pre-wrap">{message.content}</p>
                     <p className="mt-2 text-xs opacity-70">
                       {message.timestamp.toLocaleTimeString()}
                     </p>
@@ -1093,7 +1131,7 @@ export function ChatPage({
 
         <div className="shrink-0 border-t bg-background p-6">
           <div className="mx-auto max-w-4xl">
-            <div className="flex gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="relative flex-1">
                 <Input
                   value={displayedInputValue}
@@ -1135,6 +1173,7 @@ export function ChatPage({
               <Button
                 onClick={() => handleSendMessage(displayedInputValue)}
                 disabled={!displayedInputValue.trim()}
+                className="w-full sm:w-auto"
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -1160,6 +1199,13 @@ export function ChatPage({
           </div>
         </div>
       </div>
+
+      <Dialog open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+        <DialogContent className="flex h-[85vh] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden p-0 md:hidden">
+          <DialogTitle className="sr-only">Chat Menu</DialogTitle>
+          {renderSidebarContent(true)}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
