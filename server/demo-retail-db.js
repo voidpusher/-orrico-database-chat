@@ -1,8 +1,12 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const dataDirectory = path.resolve("server", "data");
+const isVercelRuntime = Boolean(process.env.VERCEL);
+const dataDirectory = isVercelRuntime
+  ? path.join(os.tmpdir(), "orrico-data")
+  : path.resolve("server", "data");
 const demoDatabasePath = path.join(
   dataDirectory,
   "demo-retail-analytics.sqlite",

@@ -1,7 +1,11 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
-const dataDirectory = path.resolve("server", "data");
+const isVercelRuntime = Boolean(process.env.VERCEL);
+const dataDirectory = isVercelRuntime
+  ? path.join(os.tmpdir(), "orrico-data")
+  : path.resolve("server", "data");
 const dataFilePath = path.join(dataDirectory, "app-data.json");
 
 const defaultData = {
