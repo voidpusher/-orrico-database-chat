@@ -8,6 +8,7 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+Desktop.ini
 portable-git/
 gh-cli/
 Retail-Shopkeeper-App-current-code/
