@@ -32,11 +32,19 @@ export default function App() {
     api
       .session()
       .then((session) => {
+        const lastPage = localStorage.getItem("orrico_last_page");
         localStorage.setItem(
           "orrico_current_user",
           JSON.stringify(session.user),
         );
         setIsLoggedIn(true);
+        setCurrentPage(
+          lastPage === "chat" ||
+            lastPage === "dashboard" ||
+            lastPage === "database"
+            ? lastPage
+            : "database",
+        );
       })
       .catch(() => {
         localStorage.removeItem("orrico_auth_token");

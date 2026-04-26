@@ -6,6 +6,8 @@ dist/
 .windsurf/
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
 portable-git/
 gh-cli/
 Retail-Shopkeeper-App-current-code/

@@ -1,6 +1,6 @@
-# Orrico Retail Intelligence
+# Orrico Database Chat
 
-Orrico is a full-stack retail analytics application that combines a conversational query interface with dashboard views for sales, customers, inventory, and orders. The project includes authentication, demo access, CSV import, schema inspection, and backend APIs for data exploration workflows.
+Orrico is a full-stack retail analytics application that combines a conversational query interface with dashboard views for sales, customers, inventory, and orders. The project includes authentication, demo access, CSV import, schema inspection, and backend APIs for day-to-day data exploration workflows.
 
 ## Features
 

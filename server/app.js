@@ -9,6 +9,7 @@ import {
 import { readData, writeData } from "./data-store.js";
 
 export const app = express();
+app.disable("x-powered-by");
 
 app.use(
   cors({

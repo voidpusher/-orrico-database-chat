@@ -3,10 +3,17 @@ dist/
 .parcel-cache/
 .sixth/
 .vercel/
+.cursor/
+.windsurf/
+.vscode/
+.idea/
 portable-git/
 gh-cli/
 Retail-Shopkeeper-App-current-code/
 
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 *.zip
 *.7z.exe
