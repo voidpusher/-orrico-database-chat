@@ -186,12 +186,6 @@ export const api = {
       throw error;
     }
   },
-  googleLogin(payload: Record<string, unknown>) {
-    return request("/auth/google", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-  },
   async session() {
     try {
       return await request("/auth/session", { authenticated: true });

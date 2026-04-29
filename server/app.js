@@ -173,56 +173,6 @@ app.post("/api/auth/login", (request, response) => {
   });
 });
 
-app.post("/api/auth/google", (request, response) => {
-  const {
-    googleId,
-    email,
-    firstName,
-    lastName,
-    avatarUrl,
-  } = request.body || {};
-
-  if (!googleId || !email) {
-    response.status(400).json({ error: "Google account details are incomplete." });
-    return;
-  }
-
-  const data = readData();
-  const normalizedEmail = String(email).trim().toLowerCase();
-  let user = data.users.find(
-    (entry) => entry.email.toLowerCase() === normalizedEmail,
-  );
-
-  if (!user) {
-    user = {
-      id: `google-${googleId}`,
-      firstName: firstName || "Google",
-      lastName: lastName || "User",
-      email: normalizedEmail,
-      businessName: "Google Account",
-      avatarUrl: avatarUrl || null,
-      authProvider: "google",
-      createdAt: new Date().toISOString(),
-    };
-    data.users.push(user);
-  } else {
-    user.avatarUrl = avatarUrl || user.avatarUrl || null;
-  }
-
-  const token = createToken();
-  data.sessions.push({
-    token,
-    userId: user.id,
-    createdAt: new Date().toISOString(),
-  });
-  writeData(data);
-
-  response.json({
-    token,
-    user: sanitizeUser(user),
-  });
-});
-
 app.get("/api/auth/session", (request, response) => {
   const session = getSessionFromRequest(request);
 

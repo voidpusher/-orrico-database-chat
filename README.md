@@ -5,7 +5,6 @@ Orrico is a full-stack retail analytics application that combines a conversation
 ## Features
 
 - email/password authentication
-- Google sign-in support
 - demo account for walkthroughs
 - chat-based querying for retail data
 - voice input in chat
@@ -74,7 +73,6 @@ npm run build
 Create a local `.env` file using `.env.example` as a reference.
 
 ```env
-GOOGLE_CLIENT_ID=your-google-oauth-web-client-id.apps.googleusercontent.com
 API_BASE_URL=http://localhost:4000/api
 ```
 
@@ -88,7 +86,6 @@ API_BASE_URL=http://localhost:4000/api
 - `GET /api/health`
 - `POST /api/auth/signup`
 - `POST /api/auth/login`
-- `POST /api/auth/google`
 - `GET /api/auth/session`
 - `POST /api/auth/logout`
 - `GET /api/database/current`
