@@ -65,7 +65,11 @@ import {
   Cell,
 } from "recharts";
 import { toast } from "sonner";
-import { safeJsonParse } from "../lib/storage";
+import {
+  safeJsonParse,
+  safeStorageGet,
+  safeStorageSet,
+} from "../lib/storage";
 import {
   Dialog,
   DialogContent,
@@ -594,20 +598,20 @@ export function DashboardPage({
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [activeNavItem, setActiveNavItem] = useState("dashboard");
   const [posEnabled, setPosEnabled] = useState(() => {
-    const saved = localStorage.getItem("orrico_pos_enabled");
+    const saved = safeStorageGet("orrico_pos_enabled");
     return safeJsonParse(saved, false);
   });
   const posIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [products, setProducts] = useState<Product[]>(() => {
-    const savedVersion = localStorage.getItem("orrico_data_version");
+    const savedVersion = safeStorageGet("orrico_data_version");
     
     if (savedVersion !== DATA_VERSION) {
-      localStorage.setItem("orrico_data_version", DATA_VERSION);
+      safeStorageSet("orrico_data_version", DATA_VERSION);
       return initialProducts;
     }
     
-    const saved = localStorage.getItem("orrico_products");
+    const saved = safeStorageGet("orrico_products");
     return safeJsonParse(saved, initialProducts);
   });
 
@@ -641,8 +645,8 @@ export function DashboardPage({
   };
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
-    const savedVersion = localStorage.getItem("orrico_data_version");
-    const saved = localStorage.getItem("orrico_customers");
+    const savedVersion = safeStorageGet("orrico_data_version");
+    const saved = safeStorageGet("orrico_customers");
     
     if (savedVersion !== DATA_VERSION || !saved) {
       return getFullCustomerList();
@@ -660,8 +664,8 @@ export function DashboardPage({
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
-    const savedVersion = localStorage.getItem("orrico_data_version");
-    const saved = localStorage.getItem("orrico_orders");
+    const savedVersion = safeStorageGet("orrico_data_version");
+    const saved = safeStorageGet("orrico_orders");
     
     if (savedVersion !== DATA_VERSION) {
       return initialOrders;
@@ -671,12 +675,12 @@ export function DashboardPage({
   });
 
   const [todayRevenue, setTodayRevenue] = useState(() => {
-    const saved = localStorage.getItem("orrico_today_revenue");
+    const saved = safeStorageGet("orrico_today_revenue");
     return saved ? parseFloat(saved) : 145750;
   });
 
   const [todayOrders, setTodayOrders] = useState(() => {
-    const saved = localStorage.getItem("orrico_today_orders");
+    const saved = safeStorageGet("orrico_today_orders");
     return saved ? parseInt(saved) : 18;
   });
 
@@ -698,27 +702,27 @@ export function DashboardPage({
   });
 
   useEffect(() => {
-    localStorage.setItem("orrico_products", JSON.stringify(products));
+    safeStorageSet("orrico_products", JSON.stringify(products));
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem("orrico_customers", JSON.stringify(customers));
+    safeStorageSet("orrico_customers", JSON.stringify(customers));
   }, [customers]);
 
   useEffect(() => {
-    localStorage.setItem("orrico_orders", JSON.stringify(orders));
+    safeStorageSet("orrico_orders", JSON.stringify(orders));
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem("orrico_today_revenue", todayRevenue.toString());
+    safeStorageSet("orrico_today_revenue", todayRevenue.toString());
   }, [todayRevenue]);
 
   useEffect(() => {
-    localStorage.setItem("orrico_today_orders", todayOrders.toString());
+    safeStorageSet("orrico_today_orders", todayOrders.toString());
   }, [todayOrders]);
 
   useEffect(() => {
-    localStorage.setItem("orrico_pos_enabled", JSON.stringify(posEnabled));
+    safeStorageSet("orrico_pos_enabled", JSON.stringify(posEnabled));
   }, [posEnabled]);
 
   useEffect(() => {

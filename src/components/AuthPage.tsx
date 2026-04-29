@@ -27,7 +27,11 @@ import {
 import { toast } from "sonner";
 import shopkeeperImage from "../assets/2609b7d59d0b4c5c57d1b7fab24a98ad05088a2f.png";
 import { api } from "../lib/api";
-import { safeJsonParse } from "../lib/storage";
+import {
+  safeJsonParse,
+  safeStorageGet,
+  safeStorageSet,
+} from "../lib/storage";
 
 declare global {
   interface Window {
@@ -118,8 +122,8 @@ export function AuthPage({
   const googleClientId = runtimeEnv.GOOGLE_CLIENT_ID || "";
 
   const persistSession = (token: string, user: unknown) => {
-    localStorage.setItem("orrico_auth_token", token);
-    localStorage.setItem(
+    safeStorageSet("orrico_auth_token", token);
+    safeStorageSet(
       "orrico_current_user",
       JSON.stringify(user),
     );
@@ -161,7 +165,7 @@ export function AuthPage({
       }
 
       const existingUsers = safeJsonParse<any[]>(
-        localStorage.getItem("orrico_users"),
+        safeStorageGet("orrico_users"),
         [],
       );
       const existingUser = existingUsers.find(
@@ -184,7 +188,7 @@ export function AuthPage({
 
       if (!existingUser) {
         existingUsers.push(googleUser);
-        localStorage.setItem(
+        safeStorageSet(
           "orrico_users",
           JSON.stringify(existingUsers),
         );

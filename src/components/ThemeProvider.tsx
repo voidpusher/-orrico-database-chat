@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { safeStorageGet, safeStorageSet } from "../lib/storage";
 
 type Theme = "light" | "dark";
 
@@ -10,16 +11,23 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const savedTheme = localStorage.getItem("orrico_theme") as Theme;
-    if (savedTheme) {
-      return savedTheme;
+  const [theme, setTheme] = useState<Theme>("light");
+
+  useEffect(() => {
+    const savedTheme = safeStorageGet("orrico_theme") as Theme | null;
+
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
+      return;
     }
-    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      return "dark";
+
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+    ) {
+      setTheme("dark");
     }
-    return "light";
-  });
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -28,7 +36,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove("dark");
     }
-    localStorage.setItem("orrico_theme", theme);
+    safeStorageSet("orrico_theme", theme);
   }, [theme]);
 
   const toggleTheme = () => {

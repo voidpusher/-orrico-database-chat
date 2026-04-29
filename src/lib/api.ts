@@ -1,4 +1,8 @@
-import { safeJsonParse } from "./storage";
+import {
+  safeJsonParse,
+  safeStorageGet,
+  safeStorageSet,
+} from "./storage";
 
 const DEFAULT_API_BASE_URL =
   typeof window !== "undefined" &&
@@ -101,12 +105,12 @@ function buildLocalChatReply(message: string) {
 }
 
 function getStoredCurrentUser() {
-  const storedUser = localStorage.getItem("orrico_current_user");
+  const storedUser = safeStorageGet("orrico_current_user");
   return safeJsonParse(storedUser, null);
 }
 
 function getStoredDatabaseConnection() {
-  const storedConnection = localStorage.getItem(LOCAL_DB_CONNECTION_KEY);
+  const storedConnection = safeStorageGet(LOCAL_DB_CONNECTION_KEY);
   return safeJsonParse(storedConnection, null);
 }
 
@@ -115,7 +119,7 @@ async function request(path: string, options: RequestOptions = {}) {
   headers.set("Content-Type", "application/json");
 
   if (options.authenticated) {
-    const token = localStorage.getItem("orrico_auth_token");
+    const token = safeStorageGet("orrico_auth_token");
 
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);
@@ -170,8 +174,8 @@ export const api = {
 
       if (normalizedEmail === DEMO_EMAIL && password === DEMO_PASSWORD) {
         const user = getDemoUser();
-        localStorage.setItem("orrico_auth_token", LOCAL_DEMO_TOKEN);
-        localStorage.setItem("orrico_current_user", JSON.stringify(user));
+        safeStorageSet("orrico_auth_token", LOCAL_DEMO_TOKEN);
+        safeStorageSet("orrico_current_user", JSON.stringify(user));
 
         return {
           token: LOCAL_DEMO_TOKEN,
@@ -192,7 +196,7 @@ export const api = {
     try {
       return await request("/auth/session", { authenticated: true });
     } catch (error) {
-      const token = localStorage.getItem("orrico_auth_token");
+      const token = safeStorageGet("orrico_auth_token");
       const user = getStoredCurrentUser();
 
       if (token === LOCAL_DEMO_TOKEN && user) {
@@ -256,7 +260,7 @@ export const api = {
         ...payload,
         updatedAt: new Date().toISOString(),
       };
-      localStorage.setItem(
+      safeStorageSet(
         LOCAL_DB_CONNECTION_KEY,
         JSON.stringify(connection),
       );

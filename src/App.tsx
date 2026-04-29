@@ -8,6 +8,11 @@ import { DatabaseConnectionPage } from "./components/DatabaseConnectionPage";
 import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { api } from "./lib/api";
+import {
+  safeStorageGet,
+  safeStorageRemove,
+  safeStorageSet,
+} from "./lib/storage";
 
 type Page =
   | "landing"
@@ -23,7 +28,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    const authToken = localStorage.getItem("orrico_auth_token");
+    const authToken = safeStorageGet("orrico_auth_token");
 
     if (!authToken) {
       return;
@@ -32,8 +37,8 @@ export default function App() {
     api
       .session()
       .then((session) => {
-        const lastPage = localStorage.getItem("orrico_last_page");
-        localStorage.setItem(
+        const lastPage = safeStorageGet("orrico_last_page");
+        safeStorageSet(
           "orrico_current_user",
           JSON.stringify(session.user),
         );
@@ -47,8 +52,8 @@ export default function App() {
         );
       })
       .catch(() => {
-        localStorage.removeItem("orrico_auth_token");
-        localStorage.removeItem("orrico_current_user");
+        safeStorageRemove("orrico_auth_token");
+        safeStorageRemove("orrico_current_user");
       });
   }, []);
 
@@ -59,10 +64,10 @@ export default function App() {
 
   const handleLogout = () => {
     api.logout().catch(() => undefined);
-    localStorage.removeItem("orrico_auth_token");
-    localStorage.removeItem("orrico_current_user");
-    localStorage.removeItem("orrico_last_page");
-    localStorage.removeItem("orrico_db_connection");
+    safeStorageRemove("orrico_auth_token");
+    safeStorageRemove("orrico_current_user");
+    safeStorageRemove("orrico_last_page");
+    safeStorageRemove("orrico_db_connection");
     setIsLoggedIn(false);
     setCurrentPage("landing");
   };
@@ -110,7 +115,7 @@ export default function App() {
               setCurrentPage("support")
             }
             onNavigateToDashboard={() => {
-              localStorage.setItem(
+              safeStorageSet(
                 "orrico_last_page",
                 "dashboard",
               );
@@ -128,7 +133,7 @@ export default function App() {
               setCurrentPage("support")
             }
             onNavigateToChat={() => {
-              localStorage.setItem("orrico_last_page", "chat");
+              safeStorageSet("orrico_last_page", "chat");
               setCurrentPage("chat");
             }}
             onNavigateToLanding={() =>
