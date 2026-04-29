@@ -65,6 +65,7 @@ import {
   Cell,
 } from "recharts";
 import { toast } from "sonner";
+import { safeJsonParse } from "../lib/storage";
 import {
   Dialog,
   DialogContent,
@@ -594,7 +595,7 @@ export function DashboardPage({
   const [activeNavItem, setActiveNavItem] = useState("dashboard");
   const [posEnabled, setPosEnabled] = useState(() => {
     const saved = localStorage.getItem("orrico_pos_enabled");
-    return saved ? JSON.parse(saved) : false;
+    return safeJsonParse(saved, false);
   });
   const posIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -607,7 +608,7 @@ export function DashboardPage({
     }
     
     const saved = localStorage.getItem("orrico_products");
-    return saved ? JSON.parse(saved) : initialProducts;
+    return safeJsonParse(saved, initialProducts);
   });
 
   const getFullCustomerList = () => {
@@ -647,7 +648,10 @@ export function DashboardPage({
       return getFullCustomerList();
     }
     
-    const parsedCustomers = JSON.parse(saved);
+    const parsedCustomers = safeJsonParse<Customer[]>(
+      saved,
+      getFullCustomerList(),
+    );
     if (parsedCustomers.length < 68) {
       return getFullCustomerList();
     }
@@ -663,7 +667,7 @@ export function DashboardPage({
       return initialOrders;
     }
     
-    return saved ? JSON.parse(saved) : initialOrders;
+    return safeJsonParse(saved, initialOrders);
   });
 
   const [todayRevenue, setTodayRevenue] = useState(() => {

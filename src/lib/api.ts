@@ -1,3 +1,5 @@
+import { safeJsonParse } from "./storage";
+
 const DEFAULT_API_BASE_URL =
   typeof window !== "undefined" &&
   !["localhost", "127.0.0.1"].includes(window.location.hostname)
@@ -100,12 +102,12 @@ function buildLocalChatReply(message: string) {
 
 function getStoredCurrentUser() {
   const storedUser = localStorage.getItem("orrico_current_user");
-  return storedUser ? JSON.parse(storedUser) : null;
+  return safeJsonParse(storedUser, null);
 }
 
 function getStoredDatabaseConnection() {
   const storedConnection = localStorage.getItem(LOCAL_DB_CONNECTION_KEY);
-  return storedConnection ? JSON.parse(storedConnection) : null;
+  return safeJsonParse(storedConnection, null);
 }
 
 async function request(path: string, options: RequestOptions = {}) {

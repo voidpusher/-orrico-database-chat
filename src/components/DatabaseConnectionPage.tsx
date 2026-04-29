@@ -16,6 +16,7 @@ import { Database, Check, ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "./Logo";
 import { api } from "../lib/api";
+import { safeJsonParse } from "../lib/storage";
 
 interface DatabaseForm {
   databaseType: string;
@@ -114,8 +115,9 @@ export function DatabaseConnectionPage({
     tableName: string;
     rowCount: number;
   } | null>(null);
-  const currentUser = JSON.parse(
-    localStorage.getItem("orrico_current_user") || "{}",
+  const currentUser = safeJsonParse<Record<string, unknown>>(
+    localStorage.getItem("orrico_current_user"),
+    {},
   );
 
   const form = useForm<DatabaseForm>({

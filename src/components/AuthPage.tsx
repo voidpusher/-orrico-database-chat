@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 import shopkeeperImage from "../assets/2609b7d59d0b4c5c57d1b7fab24a98ad05088a2f.png";
 import { api } from "../lib/api";
+import { safeJsonParse } from "../lib/storage";
 
 declare global {
   interface Window {
@@ -159,8 +160,9 @@ export function AuthPage({
         throw new Error("Google profile is missing an email address.");
       }
 
-      const existingUsers = JSON.parse(
-        localStorage.getItem("orrico_users") || "[]",
+      const existingUsers = safeJsonParse<any[]>(
+        localStorage.getItem("orrico_users"),
+        [],
       );
       const existingUser = existingUsers.find(
         (user: any) => user.email === profile.email,
