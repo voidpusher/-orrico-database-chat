@@ -567,7 +567,7 @@ export function ChatPage({
 
   const renderSidebarContent = (mobile = false) => (
     <>
-      <div className="border-b p-6">
+      <div className="border-b border-border/70 p-6">
         <Logo
           iconClassName="h-6 w-6"
           className="mb-4"
@@ -585,11 +585,11 @@ export function ChatPage({
         </div>
       </div>
 
-      <div className="border-b p-6">
-        <h3 className="mb-3 font-medium">Today's Overview</h3>
+      <div className="border-b border-border/70 p-6">
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">Today's Overview</h3>
         <div className="space-y-3">
           {quickStats.map((stat, index) => (
-            <div key={index} className="flex items-center justify-between gap-3">
+            <div key={index} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/72 px-3 py-3">
               <span className="text-sm text-muted-foreground">
                 {stat.label}
               </span>
@@ -608,14 +608,14 @@ export function ChatPage({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <h3 className="mb-3 font-medium">Quick Questions</h3>
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">Quick Questions</h3>
         <div className="space-y-2">
           {quickQuestions.map((question, index) => (
             <Button
               key={index}
               variant="ghost"
               size="sm"
-              className="h-auto w-full justify-start p-2 text-left"
+              className="h-auto w-full justify-start rounded-xl border border-transparent p-3 text-left text-muted-foreground hover:border-border/70 hover:bg-background/80 hover:text-foreground"
               onClick={() => {
                 if (isRecording && recognitionRef.current) {
                   shouldSendAfterRecordingRef.current = false;
@@ -634,7 +634,7 @@ export function ChatPage({
         </div>
       </div>
 
-      <div className="space-y-2 border-t p-6">
+      <div className="space-y-2 border-t border-border/70 p-6">
         <Button
           variant="ghost"
           size="sm"
@@ -1026,12 +1026,12 @@ export function ChatPage({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <div className="hidden md:flex md:w-80 md:shrink-0 md:flex-col md:overflow-hidden md:border-r md:bg-muted/20">
+      <div className="hidden md:flex md:w-80 md:shrink-0 md:flex-col md:overflow-hidden md:border-r md:border-border/70 md:bg-sidebar/84 md:backdrop-blur">
         {renderSidebarContent()}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="shrink-0 border-b bg-background p-6">
+        <div className="shrink-0 border-b border-border/70 bg-background/88 p-6 backdrop-blur">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="mb-3 flex items-center gap-2 md:hidden">
@@ -1045,13 +1045,13 @@ export function ChatPage({
                 </Button>
                 <ThemeToggle />
               </div>
-              <h1 className="text-2xl font-semibold">{ASSISTANT_FULL_NAME}</h1>
-              <p className="text-muted-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight">{ASSISTANT_FULL_NAME}</h1>
+              <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
                 Ask {ASSISTANT_NAME} anything about your business data
               </p>
             </div>
             <div className="hidden items-center gap-2 md:flex">
-              <Badge variant="secondary" className="flex items-center gap-1 whitespace-nowrap">
+              <Badge variant="secondary" className="flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
                 <Zap className="h-3 w-3" />
                 Connected
               </Badge>
@@ -1068,7 +1068,7 @@ export function ChatPage({
           </div>
         </div>
 
-        <ScrollArea ref={scrollAreaRef} className="min-h-0 flex-1 p-6">
+        <ScrollArea ref={scrollAreaRef} className="min-h-0 flex-1 px-4 py-6 sm:px-6">
           <div className="mx-auto max-w-4xl space-y-6">
             {messages.map((message) => (
               <div
@@ -1089,13 +1089,13 @@ export function ChatPage({
                 <Card
                   className={`max-w-[88%] sm:max-w-[80%] ${
                     message.type === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : ""
+                      ? "border-primary/10 bg-primary text-primary-foreground shadow-[0_18px_40px_-28px_rgba(15,23,42,0.5)]"
+                      : "bg-card/88"
                   }`}
                 >
                   <CardContent className="p-4">
                     <p className="break-words whitespace-pre-wrap">{message.content}</p>
-                    <p className="mt-2 text-xs opacity-70">
+                    <p className="mt-3 text-[11px] uppercase tracking-[0.14em] opacity-60">
                       {message.timestamp.toLocaleTimeString()}
                     </p>
                   </CardContent>
@@ -1108,7 +1108,7 @@ export function ChatPage({
                 <Avatar className="h-8 w-8 shrink-0">
                   <AvatarFallback>{ASSISTANT_NAME}</AvatarFallback>
                 </Avatar>
-                <Card>
+                <Card className="bg-card/88">
                   <CardContent className="p-4">
                     <div className="flex gap-1">
                       <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground"></div>
@@ -1129,9 +1129,10 @@ export function ChatPage({
           </div>
         </ScrollArea>
 
-        <div className="shrink-0 border-t bg-background p-6">
+        <div className="shrink-0 border-t border-border/70 bg-background/88 p-4 backdrop-blur sm:p-6">
           <div className="mx-auto max-w-4xl">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <div className="rounded-[1.75rem] border border-border/70 bg-card/90 p-3 shadow-[0_18px_50px_-35px_rgba(15,23,42,0.35)] sm:p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="relative flex-1">
                 <Input
                   value={displayedInputValue}
@@ -1149,12 +1150,12 @@ export function ChatPage({
                       handleSendMessage(displayedInputValue);
                     }
                   }}
-                  className="pr-12"
+                  className="h-12 rounded-2xl border-border/70 bg-background/80 pr-12 text-base shadow-none"
                 />
                 <Button
                   size="sm"
                   variant="ghost"
-                  className={`absolute right-1 top-1 h-8 w-8 p-0 ${
+                  className={`absolute right-2 top-2 h-8 w-8 rounded-full p-0 ${
                     isRecording ? "text-red-500" : ""
                   }`}
                   onClick={toggleRecording}
@@ -1173,7 +1174,7 @@ export function ChatPage({
               <Button
                 onClick={() => handleSendMessage(displayedInputValue)}
                 disabled={!displayedInputValue.trim()}
-                className="w-full sm:w-auto"
+                className="h-12 w-full rounded-2xl px-5 sm:w-auto"
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -1196,6 +1197,7 @@ export function ChatPage({
               For imported CSV tables, try: "count rows from sample_orders" or
               "show top 5 by total from sample_orders"
             </p>
+            </div>
           </div>
         </div>
       </div>

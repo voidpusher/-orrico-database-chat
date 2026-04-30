@@ -11,8 +11,8 @@ interface HeaderProps {
 
 export function Header({ onSignInClick, onGetStartedClick, onSupportClick }: HeaderProps) {
   return (
-    <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-50 border-b border-border/70 bg-background/85 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
+      <div className="container mx-auto flex h-18 items-center justify-between px-4">
         <Logo />
         
         <nav className="hidden md:flex items-center gap-6">
@@ -33,16 +33,16 @@ export function Header({ onSignInClick, onGetStartedClick, onSupportClick }: Hea
           </button>
         </nav>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <ThemeToggle />
           <Button 
             variant="ghost" 
-            className="hidden md:inline-flex"
+            className="hidden md:inline-flex text-muted-foreground"
             onClick={onSignInClick}
           >
             Sign In
           </Button>
-          <Button onClick={onGetStartedClick}>
+          <Button onClick={onGetStartedClick} className="px-5">
             Get Started
           </Button>
           <Button variant="ghost" size="icon" className="md:hidden">

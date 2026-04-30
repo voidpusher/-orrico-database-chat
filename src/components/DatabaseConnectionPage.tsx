@@ -274,9 +274,9 @@ export function DatabaseConnectionPage({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-background">
-      <header className="border-b bg-background/95 backdrop-blur">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/40">
+      <header className="border-b border-border/70 bg-background/85 backdrop-blur-xl">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <Logo />
           {onLogout && (
             <Button variant="ghost" onClick={onLogout}>
@@ -286,16 +286,16 @@ export function DatabaseConnectionPage({
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-12">
+      <div className="container mx-auto px-4 py-12 lg:py-16">
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="text-center space-y-4">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
               <Database className="w-8 h-8 text-primary" />
             </div>
-            <h1 className="text-3xl">
+            <h1 className="text-4xl font-semibold tracking-tight">
               Welcome{hasExistingConnection ? " back" : ""}, {currentUser.firstName}!
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="mx-auto max-w-2xl text-lg leading-8 text-muted-foreground lg:text-xl">
               {hasExistingConnection 
                 ? "You already have a database connection configured. You can proceed or reconfigure your connection below."
                 : "Let's connect to your database to enable voice-powered queries and real-time analytics for your retail business."
@@ -304,7 +304,7 @@ export function DatabaseConnectionPage({
           </div>
 
           {hasExistingConnection && (
-            <Alert className="bg-green-50 border-green-200">
+            <Alert className="border-emerald-200 bg-emerald-50/90 shadow-sm">
               <Check className="h-4 w-4 text-green-600" />
               <AlertDescription className="flex items-center justify-between">
                 <div>
@@ -326,7 +326,7 @@ export function DatabaseConnectionPage({
             </Alert>
           )}
 
-          <Card className="shadow-xl">
+          <Card className="border-border/70 bg-card/92 shadow-[0_30px_80px_-36px_rgba(15,23,42,0.4)]">
             <CardHeader>
               <CardTitle className="text-2xl">
                 {hasExistingConnection ? "Reconfigure Database Connection" : "Connect Your Database"}
@@ -355,7 +355,7 @@ export function DatabaseConnectionPage({
                         />
                         <Label
                           htmlFor={db.id}
-                          className="flex flex-col items-start gap-3 rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary cursor-pointer transition-all"
+                          className="flex cursor-pointer flex-col items-start gap-3 rounded-2xl border border-border/80 bg-background/75 p-4 transition-all hover:-translate-y-0.5 hover:bg-accent/70 hover:text-accent-foreground peer-data-[state=checked]:border-primary peer-data-[state=checked]:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.35)]"
                         >
                           <div className="flex items-center gap-3 w-full">
                             <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border bg-muted text-sm font-semibold tracking-wide">
@@ -395,7 +395,7 @@ export function DatabaseConnectionPage({
                       </Button>
                     </div>
 
-                    <Alert className="bg-blue-50 border-blue-200">
+                    <Alert className="border-sky-200 bg-sky-50/90">
                       <AlertDescription className="text-sm">
                         Click "Use Demo Credentials" to auto-fill with working demo
                         connection details and test the application.
@@ -517,7 +517,7 @@ export function DatabaseConnectionPage({
                       </Button>
                     </div>
 
-                    <Alert className="bg-blue-50 border-blue-200">
+                    <Alert className="border-sky-200 bg-sky-50/90">
                       <AlertDescription className="text-sm">
                         Click "Use Demo Database" to load a pre-configured SQLite
                         database with sample retail data.
@@ -552,7 +552,7 @@ export function DatabaseConnectionPage({
                       />
                     </div>
 
-                    <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                    <div className="space-y-4 rounded-[1.5rem] border border-border/70 bg-muted/40 p-5">
                       <div className="space-y-1">
                         <h4 className="font-medium">Import CSV Data</h4>
                         <p className="text-sm text-muted-foreground">
@@ -598,7 +598,7 @@ export function DatabaseConnectionPage({
                       </Button>
 
                       {lastImportResult && (
-                        <Alert className="bg-green-50 border-green-200">
+                        <Alert className="border-emerald-200 bg-emerald-50/90">
                           <AlertDescription className="text-sm">
                             Imported <strong>{lastImportResult.rowCount}</strong> rows
                             into <strong>{lastImportResult.tableName}</strong>. Ask chat
@@ -633,7 +633,7 @@ export function DatabaseConnectionPage({
           </Card>
 
           <div className="grid md:grid-cols-2 gap-6">
-            <Card className="bg-muted/50">
+            <Card className="border-border/70 bg-card/82">
               <CardContent className="pt-6">
                 <div className="flex gap-4">
                   <div className="flex-shrink-0">
@@ -652,7 +652,7 @@ export function DatabaseConnectionPage({
               </CardContent>
             </Card>
 
-            <Card className="bg-blue-50 border-blue-200">
+            <Card className="border-sky-200 bg-sky-50/85">
               <CardContent className="pt-6">
                 <div className="flex gap-4">
                   <div className="flex-shrink-0">

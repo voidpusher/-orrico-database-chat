@@ -1131,8 +1131,8 @@ export function DashboardPage({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <div className="flex w-80 shrink-0 flex-col overflow-hidden border-r bg-muted/20">
-        <div className="p-6 border-b">
+      <div className="hidden w-80 shrink-0 flex-col overflow-hidden border-r border-border/70 bg-sidebar/84 md:flex md:backdrop-blur">
+        <div className="border-b border-border/70 p-6">
           <Logo iconClassName="h-6 w-6" className="mb-4" onClick={onNavigateToLanding} clickable={!!onNavigateToLanding} />
           <div className="flex items-center gap-2 mb-3">
             <Avatar className="h-8 w-8">
@@ -1146,7 +1146,7 @@ export function DashboardPage({
             </div>
           </div>
           
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-card/84 p-4 shadow-sm">
             <div className="flex items-center gap-2">
               {posEnabled ? (
                 <>
@@ -1177,8 +1177,8 @@ export function DashboardPage({
           </div>
         </div>
 
-        <div className="p-6 border-b">
-          <h3 className="font-medium mb-3">Quick Actions</h3>
+        <div className="border-b border-border/70 p-6">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Quick Actions</h3>
           <div className="space-y-2">
             <Button
               onClick={onNavigateToChat}
@@ -1186,19 +1186,19 @@ export function DashboardPage({
               className="w-full justify-start"
             >
               <MessageSquare className="h-4 w-4 mr-2" />
-              AI Assistant
+              Ask Orrico
             </Button>
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <h3 className="font-medium mb-3">Navigation</h3>
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Navigation</h3>
           <div className="space-y-2">
             <Button
               variant="ghost"
               size="sm"
-              className={`w-full justify-start ${
-                activeNavItem === "dashboard" ? "bg-accent" : ""
+              className={`w-full justify-start rounded-xl ${
+                activeNavItem === "dashboard" ? "bg-accent shadow-sm" : "hover:bg-card/70"
               }`}
               onClick={() => handleNavigation("dashboard")}
             >
@@ -1208,8 +1208,8 @@ export function DashboardPage({
             <Button
               variant="ghost"
               size="sm"
-              className={`w-full justify-start ${
-                activeNavItem === "products" ? "bg-accent" : ""
+              className={`w-full justify-start rounded-xl ${
+                activeNavItem === "products" ? "bg-accent shadow-sm" : "hover:bg-card/70"
               }`}
               onClick={() => handleNavigation("products")}
             >
@@ -1219,8 +1219,8 @@ export function DashboardPage({
             <Button
               variant="ghost"
               size="sm"
-              className={`w-full justify-start ${
-                activeNavItem === "customers" ? "bg-accent" : ""
+              className={`w-full justify-start rounded-xl ${
+                activeNavItem === "customers" ? "bg-accent shadow-sm" : "hover:bg-card/70"
               }`}
               onClick={() => handleNavigation("customers")}
             >
@@ -1230,8 +1230,8 @@ export function DashboardPage({
             <Button
               variant="ghost"
               size="sm"
-              className={`w-full justify-start ${
-                activeNavItem === "inventory" ? "bg-accent" : ""
+              className={`w-full justify-start rounded-xl ${
+                activeNavItem === "inventory" ? "bg-accent shadow-sm" : "hover:bg-card/70"
               }`}
               onClick={() => handleNavigation("inventory")}
             >
@@ -1241,11 +1241,11 @@ export function DashboardPage({
           </div>
         </div>
 
-        <div className="p-6 border-t space-y-2">
+        <div className="space-y-2 border-t border-border/70 p-6">
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start"
+            className="w-full justify-start rounded-xl hover:bg-card/70"
             onClick={onNavigateToSupport}
           >
             <HelpCircle className="h-4 w-4 mr-2" />
@@ -1254,7 +1254,7 @@ export function DashboardPage({
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start"
+            className="w-full justify-start rounded-xl hover:bg-card/70"
             onClick={handleSettings}
           >
             <Settings className="h-4 w-4 mr-2" />
@@ -1263,7 +1263,7 @@ export function DashboardPage({
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start"
+            className="w-full justify-start rounded-xl hover:bg-card/70"
             onClick={onLogout}
           >
             <LogOut className="h-4 w-4 mr-2" />
@@ -1273,23 +1273,23 @@ export function DashboardPage({
       </div>
 
       <div className="min-w-0 flex-1 overflow-auto">
-        <div className="p-6 border-b bg-background">
-          <div className="flex items-center justify-between">
+        <div className="border-b border-border/70 bg-background/88 px-6 py-5 backdrop-blur-xl">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-3xl font-semibold">
+              <h1 className="text-3xl font-semibold tracking-tight">
                 {activeNavItem === "dashboard" && "Dashboard"}
                 {activeNavItem === "products" && "Products"}
                 {activeNavItem === "customers" && "Customers"}
                 {activeNavItem === "inventory" && "Inventory"}
               </h1>
-              <p className="text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
                 {activeNavItem === "dashboard" && "Welcome back! Here's what's happening with your store today."}
                 {activeNavItem === "products" && "View and manage all your products"}
                 {activeNavItem === "customers" && "Manage your customer relationships"}
                 {activeNavItem === "inventory" && "Monitor stock levels and inventory"}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ThemeToggle />
               <Button variant="outline" size="sm" onClick={handleExport}>
                 <Download className="h-4 w-4 mr-2" />
@@ -1319,17 +1319,19 @@ export function DashboardPage({
         <div className="p-6 space-y-6">
           {activeNavItem === "dashboard" && (
             <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
             {metrics.map((metric, index) => (
-              <Card key={index}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
+              <Card key={index} className="bg-card/92">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
                     {metric.title}
                   </CardTitle>
-                  {metric.icon}
+                  <div className="rounded-xl bg-secondary/80 p-2 text-foreground shadow-sm">
+                    {metric.icon}
+                  </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
+                <CardContent className="space-y-3">
+                  <div className="text-3xl font-semibold tracking-tight">
                     {metric.value}
                   </div>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -1347,15 +1349,15 @@ export function DashboardPage({
                     >
                       {metric.change}
                     </span>
-                    <span>from last week</span>
+                    <span>vs last week</span>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card className="bg-card/92">
               <CardHeader>
                 <CardTitle>Revenue Overview</CardTitle>
                 <CardDescription>
@@ -1365,7 +1367,7 @@ export function DashboardPage({
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={salesData}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="date" />
                     <YAxis />
                     <Tooltip
@@ -1374,13 +1376,13 @@ export function DashboardPage({
                         "Revenue",
                       ]}
                     />
-                    <Bar dataKey="revenue" fill="#8884d8" />
+                    <Bar dataKey="revenue" fill="#4f46e5" radius={[10, 10, 4, 4]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="bg-card/92">
               <CardHeader>
                 <CardTitle>Sales by Category</CardTitle>
                 <CardDescription>
@@ -1442,7 +1444,7 @@ export function DashboardPage({
           </div>
 
           <Tabs defaultValue="products" className="space-y-4">
-            <TabsList>
+            <TabsList className="rounded-xl bg-secondary/80 p-1">
               <TabsTrigger value="products">
                 Top Products
               </TabsTrigger>
@@ -1452,7 +1454,7 @@ export function DashboardPage({
             </TabsList>
 
             <TabsContent value="products">
-              <Card>
+              <Card className="bg-card/92">
                 <CardHeader>
                   <CardTitle>Top Selling Products</CardTitle>
                   <CardDescription>

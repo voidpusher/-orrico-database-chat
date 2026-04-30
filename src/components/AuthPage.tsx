@@ -159,9 +159,9 @@ export function AuthPage({
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-background">
-      <header className="border-b bg-background/95 backdrop-blur">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/40">
+      <header className="border-b border-border/70 bg-background/85 backdrop-blur-xl">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <Logo />
           <div className="flex items-center gap-4">
             {onNavigateToSupport && (
@@ -186,27 +186,27 @@ export function AuthPage({
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid lg:grid-cols-2 gap-12 items-center max-w-6xl mx-auto">
+      <div className="container mx-auto px-4 py-12 lg:py-16">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-8">
-            <div className="space-y-4">
-              <Badge variant="secondary" className="w-fit">
+            <div className="space-y-5">
+              <Badge variant="secondary" className="w-fit rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 <CheckCircle className="w-4 h-4 mr-1" />
                 Trusted by 10,000+ Retailers
               </Badge>
-              <h1 className="text-3xl lg:text-4xl font-bold">
+              <h1 className="text-4xl font-semibold tracking-tight lg:text-5xl">
                 Transform Your Retail
-                <span className="text-primary block">
+                <span className="text-primary/80 block">
                   Business Today
                 </span>
               </h1>
-              <p className="text-xl text-muted-foreground">
-                Join thousands of successful retailers who use
-                AI to make smarter business decisions every day.
+              <p className="max-w-2xl text-lg leading-8 text-muted-foreground lg:text-xl">
+                Join growing retailers who use Orrico to keep sales, stock,
+                customers, and reporting in one clean operating workflow.
               </p>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 p-6 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)]">
               {benefits.map((benefit, index) => (
                 <div
                   key={index}
@@ -218,7 +218,7 @@ export function AuthPage({
               ))}
             </div>
 
-            <div className="relative rounded-2xl overflow-hidden shadow-xl">
+            <div className="relative overflow-hidden rounded-[2rem] border border-white/50 shadow-[0_30px_80px_-28px_rgba(15,23,42,0.45)]">
               <img
                 src={shopkeeperImage}
                 alt="Indian shopkeeper using computer in retail shop"
@@ -229,8 +229,8 @@ export function AuthPage({
           </div>
 
           <div className="w-full max-w-md mx-auto">
-            <Card className="shadow-2xl border-0">
-              <CardHeader className="text-center space-y-4">
+            <Card className="border-border/70 bg-card/92 shadow-[0_30px_80px_-36px_rgba(15,23,42,0.4)]">
+              <CardHeader className="space-y-4 text-center">
                 <CardTitle className="text-2xl">
                   {isLogin ? "Welcome Back" : "Create Account"}
                 </CardTitle>
@@ -240,7 +240,7 @@ export function AuthPage({
                     : "Start your journey to smarter business decisions"}
                 </CardDescription>
                 {isLogin && (
-                  <div className="bg-muted/50 border border-muted-foreground/20 rounded-lg p-3 text-sm">
+                  <div className="rounded-2xl border border-border/70 bg-muted/60 p-4 text-sm text-left">
                     <p className="text-muted-foreground">
                       <strong>Demo Account:</strong>
                     </p>
@@ -260,7 +260,7 @@ export function AuthPage({
                     onSubmit={loginForm.handleSubmit(
                       onLoginSubmit,
                     )}
-                    className="space-y-4"
+                    className="space-y-5"
                   >
                     <div className="space-y-2">
                       <Label htmlFor="email">
@@ -354,7 +354,7 @@ export function AuthPage({
                       </Button>
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="space-y-3 pt-1">
                       <Button
                         type="submit"
                         className="w-full"
@@ -383,7 +383,7 @@ export function AuthPage({
                     onSubmit={signupForm.handleSubmit(
                       onSignupSubmit,
                     )}
-                    className="space-y-4"
+                    className="space-y-5"
                   >
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
