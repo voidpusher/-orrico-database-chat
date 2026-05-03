@@ -127,6 +127,21 @@ const HINGLISH_HINTS = [
   "kaun",
 ];
 
+function combineInputSegments(
+  baseText: string,
+  transcript: string,
+) {
+  if (!transcript) {
+    return baseText;
+  }
+
+  if (!baseText) {
+    return transcript;
+  }
+
+  return `${baseText}${baseText.endsWith(" ") ? "" : " "}${transcript}`;
+}
+
 const LOCALIZED_INTENT_COPY: Record<
   string,
   { hinglish: LocalizedCopy; hindi: LocalizedCopy }
@@ -560,10 +575,10 @@ export function ChatPage({
     "Compare this month to last month",
     "What's my profit margin?",
   ];
-  const displayedInputValue = [inputValue, interimTranscript]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
+  const displayedInputValue = combineInputSegments(
+    inputValue,
+    interimTranscript,
+  );
 
   const renderSidebarContent = (mobile = false) => (
     <>
@@ -746,12 +761,10 @@ export function ChatPage({
 
       if (finalTranscript.trim()) {
         setInputValue((currentValue) => {
-          const separator =
-            currentValue.trim().length > 0 && !currentValue.endsWith(" ")
-              ? " "
-              : "";
-
-          return `${currentValue}${separator}${finalTranscript.trim()}`.trimStart();
+          return combineInputSegments(
+            currentValue,
+            finalTranscript.trim(),
+          );
         });
       }
 
@@ -792,13 +805,10 @@ export function ChatPage({
       shouldSendAfterRecordingRef.current = false;
 
       if (shouldSendAfterRecording) {
-        const messageToSend = [
+        const messageToSend = combineInputSegments(
           inputValueRef.current.trim(),
           interimTranscriptRef.current.trim(),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .trim();
+        ).trim();
 
         if (messageToSend) {
           performSendMessage(messageToSend);
