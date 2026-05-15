@@ -52,6 +52,19 @@ export interface CsvImportResponse {
   }>;
 }
 
+export interface StoredDatabaseConnection {
+  databaseType: string;
+  host?: string;
+  port?: string;
+  databaseName?: string;
+  username?: string;
+  filePath?: string;
+  isDemoConnection?: boolean;
+  connectedAt?: string;
+  updatedAt?: string;
+  hasPassword?: boolean;
+}
+
 interface RequestOptions extends RequestInit {
   authenticated?: boolean;
 }
@@ -117,6 +130,74 @@ function buildLocalChatReply(message: string) {
 function getStoredCurrentUser() {
   const storedUser = safeStorageGet("orrico_current_user");
   return safeJsonParse(storedUser, null);
+}
+
+export interface DashboardMetricResponse {
+  title: string;
+  value: string;
+  change: string;
+  positive: boolean;
+  key: string;
+}
+
+export interface DashboardSeriesPoint {
+  date: string;
+  revenue: number;
+  orders: number;
+}
+
+export interface DashboardCategoryPoint {
+  name: string;
+  value: number;
+  revenue: number;
+  color: string;
+}
+
+export interface DashboardProductRow {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  sold: number;
+  revenue: number;
+  stock: number;
+}
+
+export interface DashboardCustomerRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  orders: number;
+  totalSpent: number;
+  lastOrder: string;
+}
+
+export interface DashboardSummaryResponse {
+  available: boolean;
+  reason?: string;
+  schema?: string[];
+  metrics?: DashboardMetricResponse[];
+  salesData?: DashboardSeriesPoint[];
+  categoryData?: DashboardCategoryPoint[];
+  topProducts?: DashboardProductRow[];
+  recentCustomers?: DashboardCustomerRow[];
+}
+
+export interface DashboardInventoryResponse {
+  availableProducts: number;
+  lowStockItems: number;
+  totalStockValue: number;
+  products: DashboardProductRow[];
+}
+
+export interface DashboardDetailsResponse {
+  available: boolean;
+  reason?: string;
+  schema?: string[];
+  products?: DashboardProductRow[];
+  customers?: DashboardCustomerRow[];
+  inventory?: DashboardInventoryResponse;
 }
 
 export interface DatabaseConnectionTestResponse {
@@ -235,7 +316,9 @@ export const api = {
       return null;
     }
   },
-  async currentDatabaseConnection() {
+  async currentDatabaseConnection(): Promise<{
+    connection: StoredDatabaseConnection | null;
+  }> {
     try {
       return await request("/database/current", {
         authenticated: true,
@@ -327,5 +410,15 @@ export const api = {
     return request("/chat/history", {
       authenticated: true,
     }) as Promise<{ messages: StoredChatHistoryItem[] }>;
+  },
+  dashboardSummary(): Promise<DashboardSummaryResponse> {
+    return request("/dashboard/summary", {
+      authenticated: true,
+    }) as Promise<DashboardSummaryResponse>;
+  },
+  dashboardDetails(): Promise<DashboardDetailsResponse> {
+    return request("/dashboard/details", {
+      authenticated: true,
+    }) as Promise<DashboardDetailsResponse>;
   },
 };

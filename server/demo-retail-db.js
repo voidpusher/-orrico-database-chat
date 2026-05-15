@@ -286,6 +286,37 @@ export function ensureDemoRetailDatabase() {
     const database = new DatabaseSync(demoDatabasePath);
     seedDemoRetailDatabase(database);
     database.close();
+    return demoDatabasePath;
+  }
+
+  const database = new DatabaseSync(demoDatabasePath);
+
+  try {
+    const latestOrder = database
+      .prepare(`
+        SELECT MAX(ordered_at) AS latest_ordered_at
+        FROM orders
+      `)
+      .get();
+
+    const latestTimestamp = Date.parse(
+      String(latestOrder?.latest_ordered_at || ""),
+    );
+    const daysSinceLatestOrder = Number.isFinite(latestTimestamp)
+      ? (Date.now() - latestTimestamp) / (1000 * 60 * 60 * 24)
+      : Number.POSITIVE_INFINITY;
+
+    if (daysSinceLatestOrder > 2) {
+      database.exec(`
+        DROP TABLE IF EXISTS order_items;
+        DROP TABLE IF EXISTS orders;
+        DROP TABLE IF EXISTS customers;
+        DROP TABLE IF EXISTS products;
+      `);
+      seedDemoRetailDatabase(database);
+    }
+  } finally {
+    database.close();
   }
 
   return demoDatabasePath;

@@ -71,6 +71,12 @@ import {
   safeStorageSet,
 } from "../lib/storage";
 import {
+  api,
+  type DashboardDetailsResponse,
+  type DashboardSummaryResponse,
+  type StoredDatabaseConnection,
+} from "../lib/api";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -593,6 +599,13 @@ export function DashboardPage({
 }: DashboardPageProps) {
   const [selectedPeriod, setSelectedPeriod] = useState("7d");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+  const [dashboardSummary, setDashboardSummary] =
+    useState<DashboardSummaryResponse | null>(null);
+  const [dashboardDetails, setDashboardDetails] =
+    useState<DashboardDetailsResponse | null>(null);
+  const [currentConnection, setCurrentConnection] =
+    useState<StoredDatabaseConnection | null>(null);
   const [showAddProductDialog, setShowAddProductDialog] = useState(false);
   const [showNewOrderDialog, setShowNewOrderDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
@@ -725,8 +738,81 @@ export function DashboardPage({
     safeStorageSet("orrico_pos_enabled", JSON.stringify(posEnabled));
   }, [posEnabled]);
 
+  const loadDashboardSummary = async ({
+    silent = false,
+  }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setIsDashboardLoading(true);
+    }
+
+    try {
+      const result = await api.dashboardSummary();
+      setDashboardSummary(result);
+
+      if (!result.available && result.reason && !silent) {
+        toast.info(result.reason);
+      }
+    } catch (error) {
+      if (!silent) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Dashboard summary could not be loaded.",
+        );
+      }
+    } finally {
+      if (!silent) {
+        setIsDashboardLoading(false);
+      }
+    }
+  };
+
+  const loadDashboardDetails = async ({
+    silent = false,
+  }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setIsDashboardLoading(true);
+    }
+
+    try {
+      const result = await api.dashboardDetails();
+      setDashboardDetails(result);
+
+      if (!result.available && result.reason && !silent) {
+        toast.info(result.reason);
+      }
+    } catch (error) {
+      if (!silent) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Dashboard details could not be loaded.",
+        );
+      }
+    } finally {
+      if (!silent) {
+        setIsDashboardLoading(false);
+      }
+    }
+  };
+
+  const loadCurrentConnection = async () => {
+    try {
+      const result = await api.currentDatabaseConnection();
+      setCurrentConnection(result.connection || null);
+    } catch {
+      setCurrentConnection(null);
+    }
+  };
+
   useEffect(() => {
-    if (posEnabled) {
+    loadDashboardSummary({ silent: true });
+    loadDashboardDetails({ silent: true });
+    loadCurrentConnection();
+  }, []);
+
+  useEffect(() => {
+    if (posEnabled && !dashboardDetails?.available) {
       const startPosSimulation = () => {
         const randomDelay = Math.random() * 7000 + 8000; // 8-15 seconds
         posIntervalRef.current = setTimeout(() => {
@@ -750,7 +836,7 @@ export function DashboardPage({
         clearTimeout(posIntervalRef.current);
       }
     }
-  }, [posEnabled]);
+  }, [dashboardDetails?.available, posEnabled]);
 
   const simulatePosTransaction = () => {
     if (products.length === 0 || customers.length === 0) return;
@@ -866,6 +952,13 @@ export function DashboardPage({
   };
 
   const togglePosSystem = () => {
+    if (dashboardDetails?.available) {
+      toast.info(
+        "POS simulation is disabled while a live database connection is active.",
+      );
+      return;
+    }
+
     setPosEnabled(!posEnabled);
     if (!posEnabled) {
       toast.info("Enabling POS System...");
@@ -874,7 +967,7 @@ export function DashboardPage({
     }
   };
 
-  const salesData = [
+  const fallbackSalesData = [
     { date: "Mon", revenue: 125000, orders: 14 },
     { date: "Tue", revenue: 98000, orders: 11 },
     { date: "Wed", revenue: 156000, orders: 19 },
@@ -884,7 +977,7 @@ export function DashboardPage({
     { date: "Sun", revenue: 198000, orders: 24 },
   ];
 
-  const categoryData = [
+  const fallbackCategoryData = [
     {
       name: "Mobile Phones",
       value: 32,
@@ -920,7 +1013,11 @@ export function DashboardPage({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     toast.info("Refreshing dashboard data...");
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await Promise.all([
+      loadDashboardSummary({ silent: true }),
+      loadDashboardDetails({ silent: true }),
+      loadCurrentConnection(),
+    ]);
     setIsRefreshing(false);
     toast.success("Dashboard data refreshed!");
   };
@@ -933,6 +1030,13 @@ export function DashboardPage({
   };
 
   const handleAddProduct = () => {
+    if (dashboardDetails?.available) {
+      toast.info(
+        "Catalog updates are read-only for connected databases right now.",
+      );
+      return;
+    }
+
     if (!newProduct.name || !newProduct.category || !newProduct.price || !newProduct.stock) {
       toast.error("Please fill in all fields");
       return;
@@ -955,6 +1059,13 @@ export function DashboardPage({
   };
 
   const handleNewOrder = () => {
+    if (dashboardDetails?.available) {
+      toast.info(
+        "Order creation is read-only for connected databases right now.",
+      );
+      return;
+    }
+
     if (!newOrder.productId || !newOrder.quantity) {
       toast.error("Please select a product and quantity");
       return;
@@ -1092,7 +1203,7 @@ export function DashboardPage({
   const totalCustomers = customers.length;
   const totalProductsSold = products.reduce((acc, p) => acc + p.sold, 0);
 
-  const metrics = [
+  const fallbackMetrics = [
     {
       title: "Today's Revenue",
       value: `Rs ${todayRevenue.toLocaleString()}`,
@@ -1123,11 +1234,92 @@ export function DashboardPage({
     },
   ];
 
-  const topProducts = [...products]
+  const fallbackTopProducts = [...products]
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5);
 
-  const recentCustomers = [...customers].slice(0, 5);
+  const fallbackRecentCustomers = [...customers].slice(0, 5);
+  const catalogProducts =
+    dashboardDetails?.available && dashboardDetails.products
+      ? dashboardDetails.products
+      : products;
+  const catalogCustomers =
+    dashboardDetails?.available && dashboardDetails.customers
+      ? dashboardDetails.customers
+      : customers;
+  const inventoryProducts =
+    dashboardDetails?.available &&
+    dashboardDetails.inventory?.products
+      ? dashboardDetails.inventory.products
+      : products.filter((product) => product.stock > 0);
+  const inventorySummary =
+    dashboardDetails?.available && dashboardDetails.inventory
+      ? dashboardDetails.inventory
+      : {
+          availableProducts: products.filter((product) => product.stock > 0)
+            .length,
+          lowStockItems: products.filter(
+            (product) => product.stock > 0 && product.stock < 10,
+          ).length,
+          totalStockValue: products
+            .filter((product) => product.stock > 0)
+            .reduce(
+              (total, product) => total + product.stock * product.price,
+              0,
+            ),
+          products: products.filter((product) => product.stock > 0),
+        };
+  const canMutateCatalog = !dashboardDetails?.available;
+  const connectionTypeLabel = currentConnection?.databaseType
+    ? currentConnection.databaseType.toUpperCase()
+    : "Not Connected";
+  const connectionStatusLabel = currentConnection
+    ? currentConnection.isDemoConnection
+      ? "Demo Database"
+      : "Connected"
+    : "Not Connected";
+  const connectionNameLabel = currentConnection
+    ? currentConnection.databaseType === "sqlite"
+      ? currentConnection.filePath || currentConnection.databaseName || "SQLite"
+      : [
+          currentConnection.host,
+          currentConnection.port,
+          currentConnection.databaseName,
+        ]
+          .filter(Boolean)
+          .join(" / ")
+    : "No active source";
+  const salesData = dashboardSummary?.available && dashboardSummary.salesData
+    ? dashboardSummary.salesData
+    : fallbackSalesData;
+  const categoryData =
+    dashboardSummary?.available && dashboardSummary.categoryData
+      ? dashboardSummary.categoryData
+      : fallbackCategoryData;
+  const metrics =
+    dashboardSummary?.available && dashboardSummary.metrics
+      ? dashboardSummary.metrics.map((metric) => ({
+          ...metric,
+          icon:
+            metric.key === "revenue" ? (
+              <IndianRupee className="h-4 w-4" />
+            ) : metric.key === "orders" ? (
+              <ShoppingCart className="h-4 w-4" />
+            ) : metric.key === "customers" ? (
+              <Users className="h-4 w-4" />
+            ) : (
+              <Package className="h-4 w-4" />
+            ),
+        }))
+      : fallbackMetrics;
+  const topProducts =
+    dashboardSummary?.available && dashboardSummary.topProducts
+      ? dashboardSummary.topProducts
+      : fallbackTopProducts;
+  const recentCustomers =
+    dashboardSummary?.available && dashboardSummary.recentCustomers
+      ? dashboardSummary.recentCustomers
+      : fallbackRecentCustomers;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -1299,14 +1491,14 @@ export function DashboardPage({
                 variant="outline"
                 size="sm"
                 onClick={handleRefresh}
-                disabled={isRefreshing}
+                disabled={isRefreshing || isDashboardLoading}
               >
                 <RefreshCw
                   className={`h-4 w-4 mr-2 ${
-                    isRefreshing ? "animate-spin" : ""
+                    isRefreshing || isDashboardLoading ? "animate-spin" : ""
                   }`}
                 />
-                Refresh
+                {isDashboardLoading ? "Updating..." : "Refresh"}
               </Button>
               <Button>
                 <Calendar className="h-4 w-4 mr-2" />
@@ -1595,7 +1787,7 @@ export function DashboardPage({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {products.map((product) => (
+                    {catalogProducts.map((product) => (
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">
                           {product.name}
@@ -1650,7 +1842,7 @@ export function DashboardPage({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {customers.map((customer) => (
+                    {catalogCustomers.map((customer) => (
                       <TableRow key={customer.id}>
                         <TableCell className="font-medium">
                           {customer.name}
@@ -1684,7 +1876,7 @@ export function DashboardPage({
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      {products.filter(p => p.stock > 0).length}
+                      {inventorySummary.availableProducts}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Currently in stock
@@ -1700,7 +1892,7 @@ export function DashboardPage({
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      {products.filter(p => p.stock > 0 && p.stock < 10).length}
+                      {inventorySummary.lowStockItems}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Need immediate restock
@@ -1716,7 +1908,7 @@ export function DashboardPage({
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      Rs {products.filter(p => p.stock > 0).reduce((acc, p) => acc + (p.stock * p.price), 0).toLocaleString()}
+                      Rs {inventorySummary.totalStockValue.toLocaleString()}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Available inventory value
@@ -1734,14 +1926,17 @@ export function DashboardPage({
                         Products currently in stock and available for sale
                       </CardDescription>
                     </div>
-                    <Button onClick={() => setShowAddProductDialog(true)}>
+                    <Button
+                      onClick={() => setShowAddProductDialog(true)}
+                      disabled={!canMutateCatalog}
+                    >
                       <Plus className="h-4 w-4 mr-2" />
                       Add Product
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {products.filter(p => p.stock > 0).length > 0 ? (
+                  {inventoryProducts.length > 0 ? (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1754,7 +1949,7 @@ export function DashboardPage({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {products.filter(p => p.stock > 0).map((product) => (
+                        {inventoryProducts.map((product) => (
                           <TableRow key={product.id}>
                             <TableCell className="font-medium">
                               {product.name}
@@ -1806,7 +2001,10 @@ export function DashboardPage({
                       <p className="text-sm text-muted-foreground mb-4">
                         All products are currently out of stock
                       </p>
-                      <Button onClick={() => setShowAddProductDialog(true)}>
+                      <Button
+                        onClick={() => setShowAddProductDialog(true)}
+                        disabled={!canMutateCatalog}
+                      >
                         <Plus className="h-4 w-4 mr-2" />
                         Add Product
                       </Button>
@@ -1898,7 +2096,10 @@ export function DashboardPage({
             >
               Cancel
             </Button>
-            <Button onClick={handleAddProduct}>
+            <Button
+              onClick={handleAddProduct}
+              disabled={!canMutateCatalog}
+            >
               Add Product
             </Button>
           </DialogFooter>
@@ -2112,20 +2313,27 @@ export function DashboardPage({
             <TabsContent value="database" className="space-y-4">
               <div className="space-y-2">
                 <Label>Database Type</Label>
-                <Input disabled value="MySQL" />
+                <Input disabled value={connectionTypeLabel} />
               </div>
               <div className="space-y-2">
                 <Label>Connection Status</Label>
                 <div className="flex items-center gap-2">
-                  <Badge variant="default" className="bg-green-600">
-                    Connected
+                  <Badge
+                    variant={currentConnection ? "default" : "secondary"}
+                    className={currentConnection ? "bg-green-600" : ""}
+                  >
+                    {connectionStatusLabel}
                   </Badge>
                   <span className="text-sm text-muted-foreground">
-                    retail_shop_demo
+                    {connectionNameLabel}
                   </span>
                 </div>
               </div>
-              <Button variant="outline" className="w-full">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleRefresh}
+              >
                 Reconnect Database
               </Button>
             </TabsContent>

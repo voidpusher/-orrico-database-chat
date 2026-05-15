@@ -19,6 +19,10 @@ import {
   getRelationalSchemaOverview,
   testRelationalConnection,
 } from "./live-relational-db.js";
+import {
+  getDashboardDetails,
+  getDashboardSummary,
+} from "./dashboard-service.js";
 import { readData, writeData } from "./data-store.js";
 import {
   decryptSecret,
@@ -647,6 +651,62 @@ app.post("/api/database/import-csv", (request, response) => {
         error instanceof Error
           ? error.message
           : "CSV import failed.",
+    });
+  }
+});
+
+app.get("/api/dashboard/summary", async (request, response) => {
+  const session = getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const summary = await getDashboardSummary(
+      prepareConnectionForUse(connection),
+    );
+    response.json(summary);
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Dashboard summary could not be loaded.",
+    });
+  }
+});
+
+app.get("/api/dashboard/details", async (request, response) => {
+  const session = getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const details = await getDashboardDetails(
+      prepareConnectionForUse(connection),
+    );
+    response.json(details);
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Dashboard details could not be loaded.",
     });
   }
 });
