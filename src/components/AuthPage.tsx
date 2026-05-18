@@ -139,6 +139,34 @@ export function AuthPage({
       }, 1000);
     } catch (error) {
       setIsLoading(false);
+      const authError = error as Error & {
+        status?: number;
+        details?: {
+          requiresEmailVerification?: boolean;
+          email?: string;
+          verificationToken?: string;
+        };
+      };
+
+      if (
+        authError.status === 403 &&
+        authError.details?.requiresEmailVerification
+      ) {
+        verificationForm.setValue(
+          "email",
+          authError.details.email || data.email,
+        );
+        verificationForm.setValue(
+          "token",
+          authError.details.verificationToken || "",
+        );
+        setAuthMode("verify");
+        toast.error(
+          "This account still needs email verification. Check your inbox or resend the token.",
+        );
+        return;
+      }
+
       toast.error(
         error instanceof Error
           ? error.message
@@ -205,6 +233,34 @@ export function AuthPage({
       );
     } catch (error) {
       setIsLoading(false);
+      const authError = error as Error & {
+        status?: number;
+        details?: {
+          requiresEmailVerification?: boolean;
+          email?: string;
+          verificationToken?: string;
+        };
+      };
+
+      if (
+        authError.status === 409 &&
+        authError.details?.requiresEmailVerification
+      ) {
+        verificationForm.setValue(
+          "email",
+          authError.details.email || data.email,
+        );
+        verificationForm.setValue(
+          "token",
+          authError.details.verificationToken || "",
+        );
+        setAuthMode("verify");
+        toast.success(
+          "This email is already registered. A verification email has been sent again.",
+        );
+        return;
+      }
+
       toast.error(
         error instanceof Error
           ? error.message

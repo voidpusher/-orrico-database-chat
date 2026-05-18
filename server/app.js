@@ -451,6 +451,42 @@ app.post("/api/auth/signup", async (request, response) => {
   const existingUser = findUserByEmail(data, normalizedEmail);
 
   if (existingUser) {
+    if (
+      existingUser.authProvider === "password" &&
+      !existingUser.emailVerifiedAt
+    ) {
+      const verificationToken =
+        getLatestVerificationTokenForUser(data, existingUser.id) ||
+        createEmailVerificationToken(existingUser.id);
+
+      if (
+        !data.emailVerificationTokens.find(
+          (entry) => entry.token === verificationToken.token,
+        )
+      ) {
+        data.emailVerificationTokens.push(verificationToken);
+      }
+
+      await writeData(data);
+      const emailResult = await deliverVerificationEmail(
+        existingUser,
+        verificationToken.token,
+      );
+      recordFailedAuthAttempt(rateLimit.key);
+      response.status(409).json({
+        error:
+          "This email is already registered but still needs verification.",
+        requiresEmailVerification: true,
+        email: existingUser.email,
+        emailDelivery: emailResult,
+        verificationToken:
+          process.env.NODE_ENV === "production"
+            ? undefined
+            : verificationToken.token,
+      });
+      return;
+    }
+
     recordFailedAuthAttempt(rateLimit.key);
     response.status(409).json({ error: "Email already registered." });
     return;
