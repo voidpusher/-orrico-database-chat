@@ -6,6 +6,15 @@ import pg from "pg";
 
 const { Client: PostgresClient } = pg;
 
+const PG_TABLES = {
+  users: "orrico_users",
+  sessions: "orrico_sessions",
+  databaseConnections: "orrico_database_connections",
+  chatHistory: "orrico_chat_history",
+  passwordResetTokens: "orrico_password_reset_tokens",
+  emailVerificationTokens: "orrico_email_verification_tokens",
+};
+
 const defaultData = {
   users: [],
   sessions: [],
@@ -477,7 +486,7 @@ async function openPostgresClient() {
 
 async function initializePostgres(client) {
   await client.query(`
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS ${PG_TABLES.users} (
       id TEXT PRIMARY KEY,
       first_name TEXT NOT NULL,
       last_name TEXT NOT NULL,
@@ -491,40 +500,40 @@ async function initializePostgres(client) {
       email_verified_at TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS sessions (
+    CREATE TABLE IF NOT EXISTS ${PG_TABLES.sessions} (
       token TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES ${PG_TABLES.users}(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       last_seen_at TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS database_connections (
-      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    CREATE TABLE IF NOT EXISTS ${PG_TABLES.databaseConnections} (
+      user_id TEXT PRIMARY KEY REFERENCES ${PG_TABLES.users}(id) ON DELETE CASCADE,
       payload_json JSONB NOT NULL,
       updated_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS chat_history (
+    CREATE TABLE IF NOT EXISTS ${PG_TABLES.chatHistory} (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES ${PG_TABLES.users}(id) ON DELETE CASCADE,
       message TEXT NOT NULL,
       reply TEXT NOT NULL,
       mode TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    CREATE TABLE IF NOT EXISTS ${PG_TABLES.passwordResetTokens} (
       token TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES ${PG_TABLES.users}(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       consumed_at TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    CREATE TABLE IF NOT EXISTS ${PG_TABLES.emailVerificationTokens} (
       token TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES ${PG_TABLES.users}(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       consumed_at TEXT
@@ -535,7 +544,7 @@ async function initializePostgres(client) {
 async function getExistingPostgresUserCount(client) {
   const result = await client.query(`
     SELECT COUNT(*)::int AS total
-    FROM users
+    FROM ${PG_TABLES.users}
   `);
 
   return Number(result.rows[0]?.total || 0);
@@ -548,18 +557,18 @@ async function persistPostgresSnapshot(client, nextData) {
 
   try {
     await client.query(`
-      DELETE FROM email_verification_tokens;
-      DELETE FROM password_reset_tokens;
-      DELETE FROM chat_history;
-      DELETE FROM database_connections;
-      DELETE FROM sessions;
-      DELETE FROM users;
+      DELETE FROM ${PG_TABLES.emailVerificationTokens};
+      DELETE FROM ${PG_TABLES.passwordResetTokens};
+      DELETE FROM ${PG_TABLES.chatHistory};
+      DELETE FROM ${PG_TABLES.databaseConnections};
+      DELETE FROM ${PG_TABLES.sessions};
+      DELETE FROM ${PG_TABLES.users};
     `);
 
     for (const user of data.users) {
       await client.query(
         `
-          INSERT INTO users (
+          INSERT INTO ${PG_TABLES.users} (
             id,
             first_name,
             last_name,
@@ -593,7 +602,7 @@ async function persistPostgresSnapshot(client, nextData) {
     for (const session of data.sessions) {
       await client.query(
         `
-          INSERT INTO sessions (
+          INSERT INTO ${PG_TABLES.sessions} (
             token,
             user_id,
             created_at,
@@ -614,7 +623,7 @@ async function persistPostgresSnapshot(client, nextData) {
     for (const connection of data.databaseConnections) {
       await client.query(
         `
-          INSERT INTO database_connections (
+          INSERT INTO ${PG_TABLES.databaseConnections} (
             user_id,
             payload_json,
             updated_at
@@ -631,7 +640,7 @@ async function persistPostgresSnapshot(client, nextData) {
     for (const entry of data.chatHistory) {
       await client.query(
         `
-          INSERT INTO chat_history (
+          INSERT INTO ${PG_TABLES.chatHistory} (
             id,
             user_id,
             message,
@@ -654,7 +663,7 @@ async function persistPostgresSnapshot(client, nextData) {
     for (const token of data.passwordResetTokens) {
       await client.query(
         `
-          INSERT INTO password_reset_tokens (
+          INSERT INTO ${PG_TABLES.passwordResetTokens} (
             token,
             user_id,
             created_at,
@@ -675,7 +684,7 @@ async function persistPostgresSnapshot(client, nextData) {
     for (const token of data.emailVerificationTokens) {
       await client.query(
         `
-          INSERT INTO email_verification_tokens (
+          INSERT INTO ${PG_TABLES.emailVerificationTokens} (
             token,
             user_id,
             created_at,
@@ -747,32 +756,32 @@ async function readPostgresData() {
           auth_provider,
           created_at,
           email_verified_at
-        FROM users
+        FROM ${PG_TABLES.users}
         ORDER BY created_at ASC
       `),
       client.query(`
         SELECT token, user_id, created_at, expires_at, last_seen_at
-        FROM sessions
+        FROM ${PG_TABLES.sessions}
         ORDER BY created_at ASC
       `),
       client.query(`
         SELECT payload_json
-        FROM database_connections
+        FROM ${PG_TABLES.databaseConnections}
         ORDER BY updated_at ASC
       `),
       client.query(`
         SELECT id, user_id, message, reply, mode, created_at
-        FROM chat_history
+        FROM ${PG_TABLES.chatHistory}
         ORDER BY created_at ASC
       `),
       client.query(`
         SELECT token, user_id, created_at, expires_at, consumed_at
-        FROM password_reset_tokens
+        FROM ${PG_TABLES.passwordResetTokens}
         ORDER BY created_at ASC
       `),
       client.query(`
         SELECT token, user_id, created_at, expires_at, consumed_at
-        FROM email_verification_tokens
+        FROM ${PG_TABLES.emailVerificationTokens}
         ORDER BY created_at ASC
       `),
     ]);
