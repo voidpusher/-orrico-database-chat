@@ -2,25 +2,37 @@ import cors from "cors";
 import express from "express";
 import crypto from "node:crypto";
 import {
+  createEmailVerificationToken,
+  createPasswordResetToken,
   createSession,
   hashPassword,
   isPasswordHash,
   isSessionExpired,
+  isTimedTokenExpired,
   touchSession,
   verifyPassword,
 } from "./auth.js";
 import { buildChatReply } from "./chat-engine.js";
 import {
+  createRetailOrder,
+  createRetailProduct,
+  deleteRetailCustomer,
+  deleteRetailProduct,
   getSchemaOverview,
-  openRetailDatabase,
   importCsvDataset,
+  openRetailDatabase,
+  updateRetailCustomer,
+  updateRetailProductStock,
+  updateRetailProduct,
 } from "./demo-retail-db.js";
 import {
   getRelationalSchemaOverview,
   testRelationalConnection,
 } from "./live-relational-db.js";
 import {
+  getDashboardCustomers,
   getDashboardDetails,
+  getDashboardOrders,
   getDashboardSummary,
 } from "./dashboard-service.js";
 import { readData, writeData } from "./data-store.js";
@@ -28,6 +40,12 @@ import {
   decryptSecret,
   encryptSecret,
 } from "./secrets.js";
+import {
+  buildPasswordResetEmail,
+  buildVerificationEmail,
+  getAppBaseUrl,
+  sendTransactionalEmail,
+} from "./email-service.js";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -57,6 +75,8 @@ function sanitizeUser(user) {
     avatarUrl: user.avatarUrl || null,
     authProvider: user.authProvider || "password",
     createdAt: user.createdAt,
+    emailVerifiedAt: user.emailVerifiedAt || null,
+    emailVerified: Boolean(user.emailVerifiedAt),
   };
 }
 
@@ -151,14 +171,51 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function pruneExpiredSessions(data) {
+async function pruneExpiredSessions(data) {
+  const sessionsChanged =
+    data.sessions.some((entry) => isSessionExpired(entry));
+  const passwordResetTokensChanged =
+    data.passwordResetTokens.some(
+      (entry) =>
+        isTimedTokenExpired(entry) || entry.consumedAt,
+    );
+  const emailVerificationTokensChanged =
+    data.emailVerificationTokens.some(
+      (entry) =>
+        isTimedTokenExpired(entry) || entry.consumedAt,
+    );
   const nextSessions = data.sessions.filter(
     (entry) => !isSessionExpired(entry),
   );
+  const nextPasswordResetTokens = data.passwordResetTokens.filter(
+    (entry) =>
+      !isTimedTokenExpired(entry) && !entry.consumedAt,
+  );
+  const nextEmailVerificationTokens =
+    data.emailVerificationTokens.filter(
+      (entry) =>
+        !isTimedTokenExpired(entry) && !entry.consumedAt,
+    );
 
-  if (nextSessions.length !== data.sessions.length) {
+  if (sessionsChanged) {
     data.sessions = nextSessions;
-    writeData(data);
+  }
+
+  if (passwordResetTokensChanged) {
+    data.passwordResetTokens = nextPasswordResetTokens;
+  }
+
+  if (emailVerificationTokensChanged) {
+    data.emailVerificationTokens =
+      nextEmailVerificationTokens;
+  }
+
+  if (
+    sessionsChanged ||
+    passwordResetTokensChanged ||
+    emailVerificationTokensChanged
+  ) {
+    await writeData(data);
   }
 }
 
@@ -218,7 +275,7 @@ function clearFailedAuthAttempts(key) {
   authAttemptStore.delete(key);
 }
 
-function getSessionFromRequest(request) {
+async function getSessionFromRequest(request) {
   const authorization = request.headers.authorization || "";
   const token = authorization.startsWith("Bearer ")
     ? authorization.slice(7)
@@ -228,8 +285,8 @@ function getSessionFromRequest(request) {
     return null;
   }
 
-  const data = readData();
-  pruneExpiredSessions(data);
+  const data = await readData();
+  await pruneExpiredSessions(data);
   const session = data.sessions.find((entry) => entry.token === token);
 
   if (!session) {
@@ -243,9 +300,52 @@ function getSessionFromRequest(request) {
   }
 
   touchSession(session);
-  writeData(data);
+  await writeData(data);
 
   return { data, token, session, user };
+}
+
+function findUserByEmail(data, email) {
+  return data.users.find(
+    (entry) => entry.email.toLowerCase() === normalizeEmail(email),
+  );
+}
+
+function getLatestVerificationTokenForUser(data, userId) {
+  return [...data.emailVerificationTokens]
+    .filter(
+      (entry) =>
+        entry.userId === userId &&
+        !entry.consumedAt &&
+        !isTimedTokenExpired(entry),
+    )
+    .sort(
+      (left, right) =>
+        Date.parse(right.createdAt) -
+        Date.parse(left.createdAt),
+    )[0];
+}
+
+async function deliverVerificationEmail(user, token) {
+  return sendTransactionalEmail(
+    buildVerificationEmail({
+      email: user.email,
+      firstName: user.firstName,
+      token,
+      appBaseUrl: getAppBaseUrl(),
+    }),
+  );
+}
+
+async function deliverPasswordResetEmail(user, token) {
+  return sendTransactionalEmail(
+    buildPasswordResetEmail({
+      email: user.email,
+      firstName: user.firstName,
+      token,
+      appBaseUrl: getAppBaseUrl(),
+    }),
+  );
 }
 
 app.get("/api/health", (_request, response) => {
@@ -291,10 +391,8 @@ app.post("/api/auth/signup", async (request, response) => {
     return;
   }
 
-  const data = readData();
-  const existingUser = data.users.find(
-    (user) => user.email.toLowerCase() === normalizedEmail,
-  );
+  const data = await readData();
+  const existingUser = findUserByEmail(data, normalizedEmail);
 
   if (existingUser) {
     recordFailedAuthAttempt(rateLimit.key);
@@ -311,17 +409,29 @@ app.post("/api/auth/signup", async (request, response) => {
     passwordHash: await hashPassword(String(password)),
     authProvider: "password",
     createdAt: new Date().toISOString(),
+    emailVerifiedAt: null,
   };
-  const session = createSession(user.id);
+  const verificationToken = createEmailVerificationToken(
+    user.id,
+  );
 
   data.users.push(user);
-  data.sessions.push(session);
-  writeData(data);
+  data.emailVerificationTokens.push(verificationToken);
+  await writeData(data);
+  const emailResult = await deliverVerificationEmail(
+    user,
+    verificationToken.token,
+  );
   clearFailedAuthAttempts(rateLimit.key);
 
   response.status(201).json({
-    token: session.token,
     user: sanitizeUser(user),
+    requiresEmailVerification: true,
+    emailDelivery: emailResult,
+    verificationToken:
+      process.env.NODE_ENV === "production"
+        ? undefined
+        : verificationToken.token,
   });
 });
 
@@ -344,8 +454,8 @@ app.post("/api/auth/login", async (request, response) => {
     return;
   }
 
-  const data = readData();
-  pruneExpiredSessions(data);
+  const data = await readData();
+  await pruneExpiredSessions(data);
 
   let user = data.users.find(
     (entry) => entry.email.toLowerCase() === normalizedEmail,
@@ -397,9 +507,43 @@ app.post("/api/auth/login", async (request, response) => {
     return;
   }
 
+  if (
+    user.authProvider === "password" &&
+    !user.emailVerifiedAt
+  ) {
+    const verificationToken =
+      getLatestVerificationTokenForUser(data, user.id) ||
+      createEmailVerificationToken(user.id);
+
+    if (
+      !data.emailVerificationTokens.find(
+        (entry) => entry.token === verificationToken.token,
+      )
+    ) {
+      data.emailVerificationTokens.push(verificationToken);
+    }
+
+    await writeData(data);
+    const emailResult = await deliverVerificationEmail(
+      user,
+      verificationToken.token,
+    );
+    response.status(403).json({
+      error: "Please verify your email before signing in.",
+      requiresEmailVerification: true,
+      email: user.email,
+      emailDelivery: emailResult,
+      verificationToken:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : verificationToken.token,
+    });
+    return;
+  }
+
   const session = createSession(user.id);
   data.sessions.push(session);
-  writeData(data);
+  await writeData(data);
   clearFailedAuthAttempts(rateLimit.key);
 
   response.json({
@@ -408,8 +552,209 @@ app.post("/api/auth/login", async (request, response) => {
   });
 });
 
-app.get("/api/auth/session", (request, response) => {
-  const session = getSessionFromRequest(request);
+app.post("/api/auth/verify-email/request", async (request, response) => {
+  const normalizedEmail = normalizeEmail(request.body?.email);
+
+  if (!normalizedEmail) {
+    response.status(400).json({ error: "Email is required." });
+    return;
+  }
+
+  const data = await readData();
+  const user = findUserByEmail(data, normalizedEmail);
+
+  if (!user) {
+    response.json({
+      ok: true,
+      message:
+        "If an account exists for that email, a verification link has been prepared.",
+    });
+    return;
+  }
+
+  if (user.emailVerifiedAt) {
+    response.json({
+      ok: true,
+      message: "This email address is already verified.",
+    });
+    return;
+  }
+
+  data.emailVerificationTokens =
+    data.emailVerificationTokens.filter(
+      (entry) => entry.userId !== user.id,
+    );
+
+  const verificationToken = createEmailVerificationToken(
+    user.id,
+  );
+  data.emailVerificationTokens.push(verificationToken);
+  await writeData(data);
+  const emailResult = await deliverVerificationEmail(
+    user,
+    verificationToken.token,
+  );
+
+  response.json({
+    ok: true,
+    message:
+      "Verification instructions have been prepared for this email address.",
+    emailDelivery: emailResult,
+    verificationToken:
+      process.env.NODE_ENV === "production"
+        ? undefined
+        : verificationToken.token,
+  });
+});
+
+app.post("/api/auth/verify-email/confirm", async (request, response) => {
+  const normalizedEmail = normalizeEmail(request.body?.email);
+  const token = String(request.body?.token || "").trim();
+
+  if (!normalizedEmail || !token) {
+    response
+      .status(400)
+      .json({ error: "Email and verification token are required." });
+    return;
+  }
+
+  const data = await readData();
+  const user = findUserByEmail(data, normalizedEmail);
+
+  if (!user) {
+    response.status(404).json({ error: "Account not found." });
+    return;
+  }
+
+  const verificationToken = data.emailVerificationTokens.find(
+    (entry) =>
+      entry.token === token && entry.userId === user.id,
+  );
+
+  if (!verificationToken || isTimedTokenExpired(verificationToken)) {
+    response.status(400).json({
+      error: "Verification token is invalid or expired.",
+    });
+    return;
+  }
+
+  verificationToken.consumedAt = new Date().toISOString();
+  user.emailVerifiedAt = new Date().toISOString();
+  data.emailVerificationTokens =
+    data.emailVerificationTokens.filter(
+      (entry) => entry.userId !== user.id,
+    );
+  const session = createSession(user.id);
+  data.sessions.push(session);
+  await writeData(data);
+
+  response.json({
+    token: session.token,
+    user: sanitizeUser(user),
+  });
+});
+
+app.post("/api/auth/password-reset/request", async (request, response) => {
+  const normalizedEmail = normalizeEmail(request.body?.email);
+
+  if (!normalizedEmail) {
+    response.status(400).json({ error: "Email is required." });
+    return;
+  }
+
+  const data = await readData();
+  const user = findUserByEmail(data, normalizedEmail);
+
+  if (!user) {
+    response.json({
+      ok: true,
+      message:
+        "If an account exists for that email, reset instructions have been prepared.",
+    });
+    return;
+  }
+
+  data.passwordResetTokens = data.passwordResetTokens.filter(
+    (entry) => entry.userId !== user.id,
+  );
+  const resetToken = createPasswordResetToken(user.id);
+  data.passwordResetTokens.push(resetToken);
+  await writeData(data);
+  const emailResult = await deliverPasswordResetEmail(
+    user,
+    resetToken.token,
+  );
+
+  response.json({
+    ok: true,
+    message:
+      "Reset instructions have been prepared for this email address.",
+    emailDelivery: emailResult,
+    resetToken:
+      process.env.NODE_ENV === "production"
+        ? undefined
+        : resetToken.token,
+  });
+});
+
+app.post("/api/auth/password-reset/confirm", async (request, response) => {
+  const normalizedEmail = normalizeEmail(request.body?.email);
+  const token = String(request.body?.token || "").trim();
+  const password = String(request.body?.password || "");
+
+  if (!normalizedEmail || !token || !password) {
+    response.status(400).json({
+      error: "Email, reset token, and new password are required.",
+    });
+    return;
+  }
+
+  if (password.length < 8) {
+    response.status(400).json({
+      error: "Password must be at least 8 characters.",
+    });
+    return;
+  }
+
+  const data = await readData();
+  const user = findUserByEmail(data, normalizedEmail);
+
+  if (!user) {
+    response.status(404).json({ error: "Account not found." });
+    return;
+  }
+
+  const resetToken = data.passwordResetTokens.find(
+    (entry) =>
+      entry.token === token && entry.userId === user.id,
+  );
+
+  if (!resetToken || isTimedTokenExpired(resetToken)) {
+    response.status(400).json({
+      error: "Reset token is invalid or expired.",
+    });
+    return;
+  }
+
+  resetToken.consumedAt = new Date().toISOString();
+  user.passwordHash = await hashPassword(password);
+  delete user.password;
+  data.passwordResetTokens = data.passwordResetTokens.filter(
+    (entry) => entry.userId !== user.id,
+  );
+  data.sessions = data.sessions.filter(
+    (entry) => entry.userId !== user.id,
+  );
+  await writeData(data);
+
+  response.json({
+    ok: true,
+    message: "Password updated successfully. Sign in again.",
+  });
+});
+
+app.get("/api/auth/session", async (request, response) => {
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Session not found." });
@@ -421,7 +766,7 @@ app.get("/api/auth/session", (request, response) => {
   });
 });
 
-app.post("/api/auth/logout", (request, response) => {
+app.post("/api/auth/logout", async (request, response) => {
   const authorization = request.headers.authorization || "";
   const token = authorization.startsWith("Bearer ")
     ? authorization.slice(7)
@@ -432,14 +777,14 @@ app.post("/api/auth/logout", (request, response) => {
     return;
   }
 
-  const data = readData();
+  const data = await readData();
   data.sessions = data.sessions.filter((entry) => entry.token !== token);
-  writeData(data);
+  await writeData(data);
   response.status(204).end();
 });
 
-app.get("/api/database/current", (request, response) => {
-  const session = getSessionFromRequest(request);
+app.get("/api/database/current", async (request, response) => {
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Unauthorized." });
@@ -456,7 +801,7 @@ app.get("/api/database/current", (request, response) => {
 });
 
 app.get("/api/database/schema", async (request, response) => {
-  const session = getSessionFromRequest(request);
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Unauthorized." });
@@ -496,7 +841,7 @@ app.get("/api/database/schema", async (request, response) => {
 });
 
 app.post("/api/database/test", async (request, response) => {
-  const session = getSessionFromRequest(request);
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Unauthorized." });
@@ -554,7 +899,7 @@ app.post("/api/database/test", async (request, response) => {
 });
 
 app.post("/api/database/connect", async (request, response) => {
-  const session = getSessionFromRequest(request);
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Unauthorized." });
@@ -599,13 +944,13 @@ app.post("/api/database/connect", async (request, response) => {
       (entry) => entry.userId !== session.user.id,
     );
   session.data.databaseConnections.push(nextConnection);
-  writeData(session.data);
+  await writeData(session.data);
 
   response.json({ connection: sanitizeConnection(nextConnection) });
 });
 
-app.post("/api/database/import-csv", (request, response) => {
-  const session = getSessionFromRequest(request);
+app.post("/api/database/import-csv", async (request, response) => {
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Unauthorized." });
@@ -656,7 +1001,7 @@ app.post("/api/database/import-csv", (request, response) => {
 });
 
 app.get("/api/dashboard/summary", async (request, response) => {
-  const session = getSessionFromRequest(request);
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Unauthorized." });
@@ -684,7 +1029,7 @@ app.get("/api/dashboard/summary", async (request, response) => {
 });
 
 app.get("/api/dashboard/details", async (request, response) => {
-  const session = getSessionFromRequest(request);
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Unauthorized." });
@@ -711,8 +1056,281 @@ app.get("/api/dashboard/details", async (request, response) => {
   }
 });
 
-app.get("/api/chat/history", (request, response) => {
-  const session = getSessionFromRequest(request);
+app.get("/api/dashboard/orders", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const orders = await getDashboardOrders(
+      prepareConnectionForUse(connection),
+      request.query.limit,
+    );
+    response.json(orders);
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Dashboard orders could not be loaded.",
+    });
+  }
+});
+
+app.get("/api/dashboard/customers", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const customers = await getDashboardCustomers(
+      prepareConnectionForUse(connection),
+    );
+    response.json(customers);
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Dashboard customers could not be loaded.",
+    });
+  }
+});
+
+app.post("/api/dashboard/products", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const product = createRetailProduct(
+      prepareConnectionForUse(connection),
+      request.body || {},
+    );
+    response.status(201).json({ product });
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Product could not be created.",
+    });
+  }
+});
+
+app.patch("/api/dashboard/products/:productId", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const product = updateRetailProduct(
+      prepareConnectionForUse(connection),
+      {
+        productId: request.params.productId,
+        ...request.body,
+      },
+    );
+    response.json({ product });
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Product could not be updated.",
+    });
+  }
+});
+
+app.patch("/api/dashboard/products/:productId/stock", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const product = updateRetailProductStock(
+      prepareConnectionForUse(connection),
+      {
+        productId: request.params.productId,
+        stock: request.body?.stock,
+      },
+    );
+    response.json({ product });
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Product stock could not be updated.",
+    });
+  }
+});
+
+app.delete("/api/dashboard/products/:productId", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const product = deleteRetailProduct(
+      prepareConnectionForUse(connection),
+      {
+        productId: request.params.productId,
+      },
+    );
+    response.json({ product });
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Product could not be deleted.",
+    });
+  }
+});
+
+app.patch("/api/dashboard/customers/:customerId", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const customer = updateRetailCustomer(
+      prepareConnectionForUse(connection),
+      {
+        customerId: request.params.customerId,
+        ...request.body,
+      },
+    );
+    response.json({ customer });
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Customer could not be updated.",
+    });
+  }
+});
+
+app.delete("/api/dashboard/customers/:customerId", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const customer = deleteRetailCustomer(
+      prepareConnectionForUse(connection),
+      {
+        customerId: request.params.customerId,
+      },
+    );
+    response.json({ customer });
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Customer could not be deleted.",
+    });
+  }
+});
+
+app.post("/api/dashboard/orders", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const connection =
+    session.data.databaseConnections.find(
+      (entry) => entry.userId === session.user.id,
+    ) || null;
+
+  try {
+    const result = createRetailOrder(
+      prepareConnectionForUse(connection),
+      request.body || {},
+    );
+    response.status(201).json(result);
+  } catch (error) {
+    response.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Order could not be created.",
+    });
+  }
+});
+
+app.get("/api/chat/history", async (request, response) => {
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Unauthorized." });
@@ -729,7 +1347,7 @@ app.get("/api/chat/history", (request, response) => {
 });
 
 app.post("/api/chat/message", async (request, response) => {
-  const session = getSessionFromRequest(request);
+  const session = await getSessionFromRequest(request);
 
   if (!session) {
     response.status(401).json({ error: "Unauthorized." });
@@ -771,7 +1389,7 @@ app.post("/api/chat/message", async (request, response) => {
     mode: result.mode,
     createdAt: new Date().toISOString(),
   });
-  writeData(session.data);
+  await writeData(session.data);
 
   response.json(result);
 });

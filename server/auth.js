@@ -11,6 +11,12 @@ const SESSION_TTL_HOURS = Number(
   process.env.SESSION_TTL_HOURS || 24 * 30,
 );
 const SESSION_TTL_MS = SESSION_TTL_HOURS * 60 * 60 * 1000;
+const PASSWORD_RESET_TTL_HOURS = Number(
+  process.env.PASSWORD_RESET_TTL_HOURS || 2,
+);
+const EMAIL_VERIFICATION_TTL_HOURS = Number(
+  process.env.EMAIL_VERIFICATION_TTL_HOURS || 24,
+);
 
 function scryptAsync(password, salt) {
   return new Promise((resolve, reject) => {
@@ -37,6 +43,32 @@ function scryptAsync(password, salt) {
 
 export function createToken() {
   return crypto.randomBytes(24).toString("hex");
+}
+
+export function createTimedToken(ttlHours) {
+  const createdAt = new Date();
+
+  return {
+    token: createToken(),
+    createdAt: createdAt.toISOString(),
+    expiresAt: new Date(
+      createdAt.getTime() + ttlHours * 60 * 60 * 1000,
+    ).toISOString(),
+  };
+}
+
+export function createPasswordResetToken(userId) {
+  return {
+    userId,
+    ...createTimedToken(PASSWORD_RESET_TTL_HOURS),
+  };
+}
+
+export function createEmailVerificationToken(userId) {
+  return {
+    userId,
+    ...createTimedToken(EMAIL_VERIFICATION_TTL_HOURS),
+  };
 }
 
 export function isPasswordHash(value) {
@@ -135,6 +167,14 @@ export function isSessionExpired(session) {
   }
 
   return Date.parse(session.expiresAt) <= Date.now();
+}
+
+export function isTimedTokenExpired(token) {
+  if (!token?.expiresAt) {
+    return true;
+  }
+
+  return Date.parse(token.expiresAt) <= Date.now();
 }
 
 export function touchSession(session) {

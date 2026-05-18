@@ -6,7 +6,7 @@ Orrico is a full-stack retail analytics application that combines a conversation
 
 - email/password authentication
 - demo account for walkthroughs
-- password hashing and expiring API sessions
+- password hashing, expiring API sessions, email verification, and password reset
 - chat-based querying for retail data
 - voice input in chat
 - dashboard views for business metrics
@@ -25,6 +25,7 @@ Orrico is a full-stack retail analytics application that combines a conversation
 - Node.js
 - Express
 - SQLite
+- PostgreSQL (optional app persistence via `DATABASE_URL`)
 
 ## Project Structure
 
@@ -46,7 +47,7 @@ Orrico is a full-stack retail analytics application that combines a conversation
 
 ### Prerequisites
 
-- Node.js 18 or newer
+- Node.js 24.x
 - npm
 
 ### Install
@@ -79,8 +80,17 @@ Create a local `.env` file using `.env.example` as a reference.
 ```env
 API_BASE_URL=http://localhost:4000/api
 SESSION_TTL_HOURS=720
+PASSWORD_RESET_TTL_HOURS=2
+EMAIL_VERIFICATION_TTL_HOURS=24
 APP_DATA_DIRECTORY=server/data
 APP_ENCRYPTION_KEY=replace-with-a-strong-secret-key
+DATABASE_URL=
+PGSSL=disable
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=
+EMAIL_FROM=no-reply@example.com
+EMAIL_REPLY_TO=support@example.com
+APP_BASE_URL=http://localhost:3000
 ```
 
 ## Demo Account
@@ -93,6 +103,10 @@ APP_ENCRYPTION_KEY=replace-with-a-strong-secret-key
 - `GET /api/health`
 - `POST /api/auth/signup`
 - `POST /api/auth/login`
+- `POST /api/auth/verify-email/request`
+- `POST /api/auth/verify-email/confirm`
+- `POST /api/auth/password-reset/request`
+- `POST /api/auth/password-reset/confirm`
 - `GET /api/auth/session`
 - `POST /api/auth/logout`
 - `GET /api/database/current`
@@ -105,8 +119,10 @@ APP_ENCRYPTION_KEY=replace-with-a-strong-secret-key
 
 ## Notes
 
-- the application now persists users, sessions, connections, and chat history in SQLite
+- the application persists users, sessions, connections, chat history, and auth tokens in SQLite by default
+- if `DATABASE_URL` is configured, app persistence moves to PostgreSQL with a migration path from the existing SQLite snapshot
 - stored database credentials are encrypted before persistence
+- verification and reset emails are provider-backed when `RESEND_API_KEY` and sender env vars are configured
 - SQLite is the main working query engine in the current version, both for app state and demo/imported analytics data
 - PostgreSQL and MySQL now support live connection testing and schema inspection
 - SQLite remains the strongest path for built-in retail analytics and CSV-driven querying

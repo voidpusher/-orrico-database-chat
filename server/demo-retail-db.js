@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 const isVercelRuntime = Boolean(process.env.VERCEL);
@@ -547,6 +548,533 @@ export function importCsvDataset(
     } catch {
     }
     throw error;
+  } finally {
+    database.close();
+  }
+}
+
+function assertWritableRetailConnection(connection) {
+  if (
+    connection &&
+    connection.databaseType &&
+    connection.databaseType !== "sqlite" &&
+    !connection.isDemoConnection
+  ) {
+    throw new Error(
+      "Catalog writes are currently available only for the demo SQLite database and SQLite file connections.",
+    );
+  }
+}
+
+function buildProductIdentifier() {
+  return `p-${crypto.randomUUID()}`;
+}
+
+function buildCustomerIdentifier() {
+  return `c-${crypto.randomUUID()}`;
+}
+
+function buildOrderIdentifier() {
+  return `ord-${crypto.randomUUID()}`;
+}
+
+function buildOrderItemIdentifier() {
+  return `item-${crypto.randomUUID()}`;
+}
+
+export function createRetailProduct(connection, payload) {
+  assertWritableRetailConnection(connection);
+
+  const name = String(payload?.name || "").trim();
+  const category = String(payload?.category || "").trim();
+  const price = Number(payload?.price);
+  const stock = Number.parseInt(String(payload?.stock || ""), 10);
+  const costPrice =
+    payload?.costPrice !== undefined && payload?.costPrice !== null
+      ? Number(payload.costPrice)
+      : Math.round(price * 0.75);
+
+  if (!name || !category) {
+    throw new Error("Product name and category are required.");
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error("Product price must be greater than zero.");
+  }
+
+  if (!Number.isInteger(stock) || stock < 0) {
+    throw new Error("Product stock must be zero or more.");
+  }
+
+  if (!Number.isFinite(costPrice) || costPrice < 0) {
+    throw new Error("Product cost price is invalid.");
+  }
+
+  const { database } = openRetailDatabase(connection);
+
+  try {
+    const product = {
+      id: buildProductIdentifier(),
+      name,
+      category,
+      price,
+      costPrice,
+      stock,
+    };
+
+    database
+      .prepare(`
+        INSERT INTO products (id, name, category, price, cost_price, stock)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        product.id,
+        product.name,
+        product.category,
+        product.price,
+        product.costPrice,
+        product.stock,
+      );
+
+    return product;
+  } finally {
+    database.close();
+  }
+}
+
+export function createRetailOrder(connection, payload) {
+  assertWritableRetailConnection(connection);
+
+  const productId = String(payload?.productId || "").trim();
+  const quantity = Number.parseInt(String(payload?.quantity || ""), 10);
+  const customerId = String(payload?.customerId || "").trim();
+  const customerName = String(payload?.customerName || "").trim();
+  const customerEmail = String(payload?.customerEmail || "").trim();
+  const customerPhone = String(payload?.customerPhone || "").trim();
+  const paymentMethod =
+    String(payload?.paymentMethod || "").trim() || "Manual";
+
+  if (!productId) {
+    throw new Error("Product selection is required.");
+  }
+
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    throw new Error("Quantity must be greater than zero.");
+  }
+
+  const { database } = openRetailDatabase(connection);
+
+  try {
+    const product = database
+      .prepare(`
+        SELECT id, name, category, price, cost_price, stock
+        FROM products
+        WHERE id = ?
+      `)
+      .get(productId);
+
+    if (!product) {
+      throw new Error("Selected product was not found.");
+    }
+
+    if (Number(product.stock || 0) < quantity) {
+      throw new Error("Not enough stock is available for that order.");
+    }
+
+    database.exec("BEGIN");
+
+    let nextCustomerId = customerId;
+    let customer = null;
+
+    if (nextCustomerId) {
+      customer = database
+        .prepare(`
+          SELECT id, name, email, phone
+          FROM customers
+          WHERE id = ?
+        `)
+        .get(nextCustomerId);
+
+      if (!customer) {
+        throw new Error("Selected customer was not found.");
+      }
+    } else {
+      if (!customerName || !customerEmail) {
+        throw new Error(
+          "Customer name and email are required for a new customer.",
+        );
+      }
+
+      nextCustomerId = buildCustomerIdentifier();
+      database
+        .prepare(`
+          INSERT INTO customers (id, name, email, phone)
+          VALUES (?, ?, ?, ?)
+        `)
+        .run(
+          nextCustomerId,
+          customerName,
+          customerEmail,
+          customerPhone || null,
+        );
+
+      customer = {
+        id: nextCustomerId,
+        name: customerName,
+        email: customerEmail,
+        phone: customerPhone || "",
+      };
+    }
+
+    const totalAmount = Number(product.price) * quantity;
+    const orderedAt = new Date().toISOString();
+    const orderId = buildOrderIdentifier();
+    const orderItemId = buildOrderItemIdentifier();
+
+    database
+      .prepare(`
+        INSERT INTO orders (id, customer_id, ordered_at, payment_method, total_amount)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      .run(
+        orderId,
+        nextCustomerId,
+        orderedAt,
+        paymentMethod,
+        totalAmount,
+      );
+
+    database
+      .prepare(`
+        INSERT INTO order_items (
+          id, order_id, product_id, quantity, unit_price, unit_cost, total_price
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        orderItemId,
+        orderId,
+        productId,
+        quantity,
+        Number(product.price),
+        Number(product.cost_price),
+        totalAmount,
+      );
+
+    database
+      .prepare(`
+        UPDATE products
+        SET stock = stock - ?
+        WHERE id = ?
+      `)
+      .run(quantity, productId);
+
+    database.exec("COMMIT");
+
+    return {
+      order: {
+        id: orderId,
+        customerId: nextCustomerId,
+        customerName: customer.name,
+        customerEmail: customer.email,
+        customerPhone: customer.phone || "",
+        productId: product.id,
+        productName: product.name,
+        quantity,
+        total: totalAmount,
+        date: orderedAt,
+      },
+      customer,
+    };
+  } catch (error) {
+    try {
+      database.exec("ROLLBACK");
+    } catch {
+    }
+    throw error;
+  } finally {
+    database.close();
+  }
+}
+
+export function updateRetailProductStock(connection, payload) {
+  assertWritableRetailConnection(connection);
+
+  const productId = String(payload?.productId || "").trim();
+  const stock = Number.parseInt(String(payload?.stock || ""), 10);
+
+  if (!productId) {
+    throw new Error("Product identifier is required.");
+  }
+
+  if (!Number.isInteger(stock) || stock < 0) {
+    throw new Error("Stock must be zero or more.");
+  }
+
+  const { database } = openRetailDatabase(connection);
+
+  try {
+    const existing = database
+      .prepare(`
+        SELECT id, name, category, price, stock
+        FROM products
+        WHERE id = ?
+      `)
+      .get(productId);
+
+    if (!existing) {
+      throw new Error("Product was not found.");
+    }
+
+    database
+      .prepare(`
+        UPDATE products
+        SET stock = ?
+        WHERE id = ?
+      `)
+      .run(stock, productId);
+
+    return {
+      id: String(existing.id),
+      name: existing.name,
+      category: existing.category,
+      price: Number(existing.price || 0),
+      stock,
+    };
+  } finally {
+    database.close();
+  }
+}
+
+export function updateRetailProduct(connection, payload) {
+  assertWritableRetailConnection(connection);
+
+  const productId = String(payload?.productId || "").trim();
+  const name = String(payload?.name || "").trim();
+  const category = String(payload?.category || "").trim();
+  const price = Number(payload?.price);
+  const stock = Number.parseInt(String(payload?.stock || ""), 10);
+  const costPrice =
+    payload?.costPrice !== undefined && payload?.costPrice !== null
+      ? Number(payload.costPrice)
+      : Math.round(price * 0.75);
+
+  if (!productId) {
+    throw new Error("Product identifier is required.");
+  }
+
+  if (!name || !category) {
+    throw new Error("Product name and category are required.");
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error("Product price must be greater than zero.");
+  }
+
+  if (!Number.isInteger(stock) || stock < 0) {
+    throw new Error("Stock must be zero or more.");
+  }
+
+  if (!Number.isFinite(costPrice) || costPrice < 0) {
+    throw new Error("Product cost price is invalid.");
+  }
+
+  const { database } = openRetailDatabase(connection);
+
+  try {
+    const existing = database
+      .prepare(`
+        SELECT id
+        FROM products
+        WHERE id = ?
+      `)
+      .get(productId);
+
+    if (!existing) {
+      throw new Error("Product was not found.");
+    }
+
+    database
+      .prepare(`
+        UPDATE products
+        SET name = ?, category = ?, price = ?, cost_price = ?, stock = ?
+        WHERE id = ?
+      `)
+      .run(
+        name,
+        category,
+        price,
+        costPrice,
+        stock,
+        productId,
+      );
+
+    return {
+      id: productId,
+      name,
+      category,
+      price,
+      stock,
+      costPrice,
+    };
+  } finally {
+    database.close();
+  }
+}
+
+export function deleteRetailProduct(connection, payload) {
+  assertWritableRetailConnection(connection);
+
+  const productId = String(payload?.productId || "").trim();
+
+  if (!productId) {
+    throw new Error("Product identifier is required.");
+  }
+
+  const { database } = openRetailDatabase(connection);
+
+  try {
+    const existing = database
+      .prepare(`
+        SELECT id, name
+        FROM products
+        WHERE id = ?
+      `)
+      .get(productId);
+
+    if (!existing) {
+      throw new Error("Product was not found.");
+    }
+
+    const linkedOrders = database
+      .prepare(`
+        SELECT COUNT(*) AS total
+        FROM order_items
+        WHERE product_id = ?
+      `)
+      .get(productId);
+
+    if (Number(linkedOrders?.total || 0) > 0) {
+      throw new Error(
+        "Products with existing order history cannot be deleted.",
+      );
+    }
+
+    database
+      .prepare(`
+        DELETE FROM products
+        WHERE id = ?
+      `)
+      .run(productId);
+
+    return {
+      id: String(existing.id),
+      name: existing.name,
+    };
+  } finally {
+    database.close();
+  }
+}
+
+export function updateRetailCustomer(connection, payload) {
+  assertWritableRetailConnection(connection);
+
+  const customerId = String(payload?.customerId || "").trim();
+  const name = String(payload?.name || "").trim();
+  const email = String(payload?.email || "").trim();
+  const phone = String(payload?.phone || "").trim();
+
+  if (!customerId) {
+    throw new Error("Customer identifier is required.");
+  }
+
+  if (!name || !email) {
+    throw new Error("Customer name and email are required.");
+  }
+
+  const { database } = openRetailDatabase(connection);
+
+  try {
+    const existing = database
+      .prepare(`
+        SELECT id
+        FROM customers
+        WHERE id = ?
+      `)
+      .get(customerId);
+
+    if (!existing) {
+      throw new Error("Customer was not found.");
+    }
+
+    database
+      .prepare(`
+        UPDATE customers
+        SET name = ?, email = ?, phone = ?
+        WHERE id = ?
+      `)
+      .run(name, email, phone || null, customerId);
+
+    return {
+      id: customerId,
+      name,
+      email,
+      phone,
+    };
+  } finally {
+    database.close();
+  }
+}
+
+export function deleteRetailCustomer(connection, payload) {
+  assertWritableRetailConnection(connection);
+
+  const customerId = String(payload?.customerId || "").trim();
+
+  if (!customerId) {
+    throw new Error("Customer identifier is required.");
+  }
+
+  const { database } = openRetailDatabase(connection);
+
+  try {
+    const existing = database
+      .prepare(`
+        SELECT id, name
+        FROM customers
+        WHERE id = ?
+      `)
+      .get(customerId);
+
+    if (!existing) {
+      throw new Error("Customer was not found.");
+    }
+
+    const linkedOrders = database
+      .prepare(`
+        SELECT COUNT(*) AS total
+        FROM orders
+        WHERE customer_id = ?
+      `)
+      .get(customerId);
+
+    if (Number(linkedOrders?.total || 0) > 0) {
+      throw new Error(
+        "Customers with existing order history cannot be deleted.",
+      );
+    }
+
+    database
+      .prepare(`
+        DELETE FROM customers
+        WHERE id = ?
+      `)
+      .run(customerId);
+
+    return {
+      id: String(existing.id),
+      name: existing.name,
+    };
   } finally {
     database.close();
   }

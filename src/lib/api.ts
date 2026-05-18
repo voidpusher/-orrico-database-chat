@@ -173,6 +173,26 @@ export interface DashboardCustomerRow {
   lastOrder: string;
 }
 
+export interface DashboardOrderRow {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  total: number;
+  date: string;
+}
+
+export interface DashboardCustomersResponse {
+  available: boolean;
+  reason?: string;
+  schema?: string[];
+  customers?: DashboardCustomerRow[];
+}
+
 export interface DashboardSummaryResponse {
   available: boolean;
   reason?: string;
@@ -198,6 +218,39 @@ export interface DashboardDetailsResponse {
   products?: DashboardProductRow[];
   customers?: DashboardCustomerRow[];
   inventory?: DashboardInventoryResponse;
+}
+
+export interface DashboardOrdersResponse {
+  available: boolean;
+  reason?: string;
+  schema?: string[];
+  orders?: DashboardOrderRow[];
+}
+
+export interface CreateDashboardProductPayload {
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  costPrice?: number;
+}
+
+export interface UpdateDashboardProductPayload {
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  costPrice?: number;
+}
+
+export interface CreateDashboardOrderPayload {
+  productId: string;
+  quantity: number;
+  customerId?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  paymentMethod?: string;
 }
 
 export interface DatabaseConnectionTestResponse {
@@ -247,7 +300,12 @@ async function request(path: string, options: RequestOptions = {}) {
       clearStoredSession();
     }
 
-    throw new Error(data.error || "Request failed.");
+    const error = new Error(data.error || "Request failed.");
+    Object.assign(error, {
+      status: response.status,
+      details: data,
+    });
+    throw error;
   }
 
   return data;
@@ -265,6 +323,48 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+  requestEmailVerification(email: string) {
+    return request("/auth/verify-email/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }) as Promise<{
+      ok: boolean;
+      message: string;
+      verificationToken?: string;
+    }>;
+  },
+  confirmEmailVerification(email: string, token: string) {
+    return request("/auth/verify-email/confirm", {
+      method: "POST",
+      body: JSON.stringify({ email, token }),
+    }) as Promise<{
+      token: string;
+      user: Record<string, unknown>;
+    }>;
+  },
+  requestPasswordReset(email: string) {
+    return request("/auth/password-reset/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }) as Promise<{
+      ok: boolean;
+      message: string;
+      resetToken?: string;
+    }>;
+  },
+  confirmPasswordReset(
+    email: string,
+    token: string,
+    password: string,
+  ) {
+    return request("/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ email, token, password }),
+    }) as Promise<{
+      ok: boolean;
+      message: string;
+    }>;
   },
   async login(payload: Record<string, unknown>) {
     try {
@@ -420,5 +520,113 @@ export const api = {
     return request("/dashboard/details", {
       authenticated: true,
     }) as Promise<DashboardDetailsResponse>;
+  },
+  dashboardOrders(limit = 50): Promise<DashboardOrdersResponse> {
+    return request(`/dashboard/orders?limit=${limit}`, {
+      authenticated: true,
+    }) as Promise<DashboardOrdersResponse>;
+  },
+  dashboardCustomers(): Promise<DashboardCustomersResponse> {
+    return request("/dashboard/customers", {
+      authenticated: true,
+    }) as Promise<DashboardCustomersResponse>;
+  },
+  createDashboardProduct(payload: CreateDashboardProductPayload) {
+    return request("/dashboard/products", {
+      method: "POST",
+      authenticated: true,
+      body: JSON.stringify(payload),
+    }) as Promise<{ product: DashboardProductRow }>;
+  },
+  updateDashboardProduct(
+    productId: string,
+    payload: UpdateDashboardProductPayload,
+  ) {
+    return request(`/dashboard/products/${productId}`, {
+      method: "PATCH",
+      authenticated: true,
+      body: JSON.stringify(payload),
+    }) as Promise<{
+      product: Pick<
+        DashboardProductRow,
+        "id" | "name" | "category" | "price" | "stock"
+      > & { costPrice?: number };
+    }>;
+  },
+  updateDashboardProductStock(productId: string, stock: number) {
+    return request(`/dashboard/products/${productId}/stock`, {
+      method: "PATCH",
+      authenticated: true,
+      body: JSON.stringify({ stock }),
+    }) as Promise<{
+      product: Pick<DashboardProductRow, "id" | "name" | "category" | "price" | "stock">;
+    }>;
+  },
+  deleteDashboardProduct(productId: string) {
+    return request(`/dashboard/products/${productId}`, {
+      method: "DELETE",
+      authenticated: true,
+    }) as Promise<{
+      product: {
+        id: string;
+        name: string;
+      };
+    }>;
+  },
+  updateDashboardCustomer(
+    customerId: string,
+    payload: {
+      name: string;
+      email: string;
+      phone?: string;
+    },
+  ) {
+    return request(`/dashboard/customers/${customerId}`, {
+      method: "PATCH",
+      authenticated: true,
+      body: JSON.stringify(payload),
+    }) as Promise<{
+      customer: Pick<
+        DashboardCustomerRow,
+        "id" | "name" | "email" | "phone"
+      >;
+    }>;
+  },
+  deleteDashboardCustomer(customerId: string) {
+    return request(`/dashboard/customers/${customerId}`, {
+      method: "DELETE",
+      authenticated: true,
+    }) as Promise<{
+      customer: {
+        id: string;
+        name: string;
+      };
+    }>;
+  },
+  createDashboardOrder(payload: CreateDashboardOrderPayload) {
+    return request("/dashboard/orders", {
+      method: "POST",
+      authenticated: true,
+      body: JSON.stringify(payload),
+    }) as Promise<{
+      order: {
+        id: string;
+        customerId: string;
+        customerName: string;
+        customerEmail: string;
+        customerPhone: string;
+        productId: string;
+        productName: string;
+        quantity: number;
+        total: number;
+        date: string;
+      };
+      customer: {
+        id: string;
+        name: string;
+        email: string;
+        phone: string;
+      };
+    }>;
   },
 };

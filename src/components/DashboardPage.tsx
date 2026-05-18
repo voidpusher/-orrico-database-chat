@@ -73,6 +73,7 @@ import {
 import {
   api,
   type DashboardDetailsResponse,
+  type DashboardOrdersResponse,
   type DashboardSummaryResponse,
   type StoredDatabaseConnection,
 } from "../lib/api";
@@ -604,10 +605,16 @@ export function DashboardPage({
     useState<DashboardSummaryResponse | null>(null);
   const [dashboardDetails, setDashboardDetails] =
     useState<DashboardDetailsResponse | null>(null);
+  const [dashboardOrders, setDashboardOrders] =
+    useState<DashboardOrdersResponse | null>(null);
   const [currentConnection, setCurrentConnection] =
     useState<StoredDatabaseConnection | null>(null);
   const [showAddProductDialog, setShowAddProductDialog] = useState(false);
+  const [showEditProductDialog, setShowEditProductDialog] = useState(false);
+  const [showEditCustomerDialog, setShowEditCustomerDialog] =
+    useState(false);
   const [showNewOrderDialog, setShowNewOrderDialog] = useState(false);
+  const [showStockDialog, setShowStockDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [activeNavItem, setActiveNavItem] = useState("dashboard");
   const [posEnabled, setPosEnabled] = useState(() => {
@@ -713,6 +720,18 @@ export function DashboardPage({
     productId: "",
     quantity: "1",
   });
+  const [selectedStockProduct, setSelectedStockProduct] =
+    useState<Product | null>(null);
+  const [stockAdjustmentValue, setStockAdjustmentValue] = useState("");
+  const [selectedEditProduct, setSelectedEditProduct] =
+    useState<Product | null>(null);
+  const [selectedEditCustomer, setSelectedEditCustomer] =
+    useState<Customer | null>(null);
+  const [customerForm, setCustomerForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+  });
 
   useEffect(() => {
     safeStorageSet("orrico_products", JSON.stringify(products));
@@ -796,6 +815,35 @@ export function DashboardPage({
     }
   };
 
+  const loadDashboardOrders = async ({
+    silent = false,
+  }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setIsDashboardLoading(true);
+    }
+
+    try {
+      const result = await api.dashboardOrders();
+      setDashboardOrders(result);
+
+      if (!result.available && result.reason && !silent) {
+        toast.info(result.reason);
+      }
+    } catch (error) {
+      if (!silent) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Dashboard orders could not be loaded.",
+        );
+      }
+    } finally {
+      if (!silent) {
+        setIsDashboardLoading(false);
+      }
+    }
+  };
+
   const loadCurrentConnection = async () => {
     try {
       const result = await api.currentDatabaseConnection();
@@ -808,6 +856,7 @@ export function DashboardPage({
   useEffect(() => {
     loadDashboardSummary({ silent: true });
     loadDashboardDetails({ silent: true });
+    loadDashboardOrders({ silent: true });
     loadCurrentConnection();
   }, []);
 
@@ -1016,6 +1065,7 @@ export function DashboardPage({
     await Promise.all([
       loadDashboardSummary({ silent: true }),
       loadDashboardDetails({ silent: true }),
+      loadDashboardOrders({ silent: true }),
       loadCurrentConnection(),
     ]);
     setIsRefreshing(false);
@@ -1030,7 +1080,10 @@ export function DashboardPage({
   };
 
   const handleAddProduct = () => {
-    if (dashboardDetails?.available) {
+    if (
+      currentConnection &&
+      currentConnection.databaseType !== "sqlite"
+    ) {
       toast.info(
         "Catalog updates are read-only for connected databases right now.",
       );
@@ -1042,24 +1095,37 @@ export function DashboardPage({
       return;
     }
 
-    const product: Product = {
-      id: Date.now().toString(),
-      name: newProduct.name,
-      category: newProduct.category,
-      price: parseFloat(newProduct.price),
-      sold: 0,
-      revenue: 0,
-      stock: parseInt(newProduct.stock),
-    };
-
-    setProducts([...products, product]);
-    setNewProduct({ name: "", category: "", price: "", stock: "" });
-    setShowAddProductDialog(false);
-    toast.success(`Product "${product.name}" added successfully!`);
+    api
+      .createDashboardProduct({
+        name: newProduct.name.trim(),
+        category: newProduct.category,
+        price: parseFloat(newProduct.price),
+        stock: parseInt(newProduct.stock, 10),
+      })
+      .then(async ({ product }) => {
+        setNewProduct({ name: "", category: "", price: "", stock: "" });
+        setShowAddProductDialog(false);
+        await Promise.all([
+          loadDashboardSummary({ silent: true }),
+          loadDashboardDetails({ silent: true }),
+          loadDashboardOrders({ silent: true }),
+        ]);
+        toast.success(`Product "${product.name}" added successfully!`);
+      })
+      .catch((error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Product could not be created.",
+        );
+      });
   };
 
   const handleNewOrder = () => {
-    if (dashboardDetails?.available) {
+    if (
+      currentConnection &&
+      currentConnection.databaseType !== "sqlite"
+    ) {
       toast.info(
         "Order creation is read-only for connected databases right now.",
       );
@@ -1071,129 +1137,306 @@ export function DashboardPage({
       return;
     }
 
-    const product = products.find((p) => p.id === newOrder.productId);
+    const product = catalogProducts.find(
+      (entry) => entry.id === newOrder.productId,
+    );
     if (!product) {
       toast.error("Invalid product");
       return;
     }
 
-    let customer: Customer;
+    const existingCustomer = newOrder.customerId
+      ? catalogCustomers.find((entry) => entry.id === newOrder.customerId)
+      : null;
+    const customerName = newOrder.isNewCustomer
+      ? newOrder.customerName.trim()
+      : existingCustomer?.name || "";
+    const quantity = parseInt(newOrder.quantity, 10);
 
     if (newOrder.isNewCustomer) {
       if (!newOrder.customerName || !newOrder.customerEmail) {
         toast.error("Please enter customer name and email");
         return;
       }
-
-      customer = {
-        id: Date.now().toString(),
-        name: newOrder.customerName,
-        email: newOrder.customerEmail,
-        phone: newOrder.customerPhone,
-        orders: 0,
-        totalSpent: 0,
-        lastOrder: "Just now",
-      };
-
-      setCustomers([customer, ...customers]);
     } else {
       if (!newOrder.customerId) {
         toast.error("Please select a customer");
         return;
       }
 
-      const existingCustomer = customers.find((c) => c.id === newOrder.customerId);
       if (!existingCustomer) {
         toast.error("Invalid customer");
         return;
       }
-      customer = existingCustomer;
     }
 
-    const quantity = parseInt(newOrder.quantity);
     const total = product.price * quantity;
 
-    const now = new Date();
-    const dateStr = `${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} ${now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
-    
-    const order: Order = {
-      id: Date.now().toString(),
-      customerId: customer.id,
-      customerName: customer.name,
-      customerEmail: customer.email,
-      customerPhone: customer.phone,
-      productId: newOrder.productId,
-      productName: product.name,
-      quantity,
-      total,
-      date: dateStr,
-    };
+    api
+      .createDashboardOrder({
+        productId: newOrder.productId,
+        quantity,
+        customerId: newOrder.isNewCustomer
+          ? undefined
+          : newOrder.customerId,
+        customerName: newOrder.isNewCustomer
+          ? newOrder.customerName.trim()
+          : undefined,
+        customerEmail: newOrder.isNewCustomer
+          ? newOrder.customerEmail.trim()
+          : undefined,
+        customerPhone: newOrder.isNewCustomer
+          ? newOrder.customerPhone.trim()
+          : undefined,
+      })
+      .then(async () => {
+        setNewOrder({ 
+          isNewCustomer: false,
+          customerId: "", 
+          customerName: "",
+          customerEmail: "",
+          customerPhone: "",
+          productId: "", 
+          quantity: "1" 
+        });
+        setShowNewOrderDialog(false);
+        await Promise.all([
+          loadDashboardSummary({ silent: true }),
+          loadDashboardDetails({ silent: true }),
+          loadDashboardOrders({ silent: true }),
+        ]);
 
-    setProducts(
-      products.map((p) =>
-        p.id === newOrder.productId
-          ? {
-              ...p,
-              sold: p.sold + quantity,
-              stock: p.stock - quantity,
-              revenue: p.revenue + total,
-            }
-          : p
-      )
-    );
+        const successMessage = newOrder.isNewCustomer 
+          ? `New customer "${customerName}" added and order created! ${quantity}x ${product.name} for Rs ${total.toLocaleString()}`
+          : `Order created! ${customerName} purchased ${quantity}x ${product.name} for Rs ${total.toLocaleString()}`;
 
-    if (!newOrder.isNewCustomer) {
-      setCustomers(
-        customers.map((c) =>
-          c.id === customer.id
-            ? {
-                ...c,
-                orders: c.orders + 1,
-                totalSpent: c.totalSpent + total,
-                lastOrder: "Just now",
-              }
-            : c
-        )
-      );
-    } else {
-      setCustomers(prev =>
-        prev.map((c) =>
-          c.id === customer.id
-            ? {
-                ...c,
-                orders: 1,
-                totalSpent: total,
-                lastOrder: "Just now",
-              }
-            : c
-        )
-      );
-    }
-
-    setTodayRevenue(todayRevenue + total);
-    setTodayOrders(todayOrders + 1);
-
-    setOrders([...orders, order]);
-    setNewOrder({ 
-      isNewCustomer: false,
-      customerId: "", 
-      customerName: "",
-      customerEmail: "",
-      customerPhone: "",
-      productId: "", 
-      quantity: "1" 
-    });
-    setShowNewOrderDialog(false);
-    
-    const successMessage = newOrder.isNewCustomer 
-      ? `New customer "${customer.name}" added and order created! ${quantity}x ${product.name} for Rs ${total.toLocaleString()}`
-      : `Order created! ${customer.name} purchased ${quantity}x ${product.name} for Rs ${total.toLocaleString()}`;
-    
-    toast.success(successMessage);
+        toast.success(successMessage);
+      })
+      .catch((error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Order could not be created.",
+        );
+      });
   };
 
   const handleNavigation = (item: string) => {
     setActiveNavItem(item);
+  };
+
+  const openStockDialog = (product: Product) => {
+    setSelectedStockProduct(product);
+    setStockAdjustmentValue(String(product.stock));
+    setShowStockDialog(true);
+  };
+
+  const openEditProductDialog = (product: Product) => {
+    setSelectedEditProduct(product);
+    setNewProduct({
+      name: product.name,
+      category: product.category,
+      price: String(product.price),
+      stock: String(product.stock),
+    });
+    setShowEditProductDialog(true);
+  };
+
+  const openEditCustomerDialog = (customer: Customer) => {
+    setSelectedEditCustomer(customer);
+    setCustomerForm({
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone || "",
+    });
+    setShowEditCustomerDialog(true);
+  };
+
+  const handleUpdateStock = () => {
+    if (!selectedStockProduct) {
+      return;
+    }
+
+    if (!canMutateCatalog) {
+      toast.info(
+        "Stock changes are read-only for connected databases right now.",
+      );
+      return;
+    }
+
+    const nextStock = Number.parseInt(stockAdjustmentValue, 10);
+
+    if (!Number.isInteger(nextStock) || nextStock < 0) {
+      toast.error("Stock must be zero or more.");
+      return;
+    }
+
+    api
+      .updateDashboardProductStock(selectedStockProduct.id, nextStock)
+      .then(async ({ product }) => {
+        setShowStockDialog(false);
+        setSelectedStockProduct(null);
+        setStockAdjustmentValue("");
+        await Promise.all([
+          loadDashboardSummary({ silent: true }),
+          loadDashboardDetails({ silent: true }),
+          loadDashboardOrders({ silent: true }),
+        ]);
+        toast.success(`Stock updated for "${product.name}".`);
+      })
+      .catch((error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Stock could not be updated.",
+        );
+      });
+  };
+
+  const handleEditProduct = () => {
+    if (!selectedEditProduct) {
+      return;
+    }
+
+    if (!canMutateCatalog) {
+      toast.info(
+        "Catalog updates are read-only for connected databases right now.",
+      );
+      return;
+    }
+
+    if (
+      !newProduct.name ||
+      !newProduct.category ||
+      !newProduct.price ||
+      !newProduct.stock
+    ) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    api
+      .updateDashboardProduct(selectedEditProduct.id, {
+        name: newProduct.name.trim(),
+        category: newProduct.category,
+        price: parseFloat(newProduct.price),
+        stock: parseInt(newProduct.stock, 10),
+      })
+      .then(async ({ product }) => {
+        setShowEditProductDialog(false);
+        setSelectedEditProduct(null);
+        setNewProduct({ name: "", category: "", price: "", stock: "" });
+        await Promise.all([
+          loadDashboardSummary({ silent: true }),
+          loadDashboardDetails({ silent: true }),
+          loadDashboardOrders({ silent: true }),
+        ]);
+        toast.success(`Product "${product.name}" updated successfully!`);
+      })
+      .catch((error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Product could not be updated.",
+        );
+      });
+  };
+
+  const handleDeleteProduct = (product: Product) => {
+    if (!canMutateCatalog) {
+      toast.info(
+        "Catalog updates are read-only for connected databases right now.",
+      );
+      return;
+    }
+
+    api
+      .deleteDashboardProduct(product.id)
+      .then(async ({ product: deleted }) => {
+        await Promise.all([
+          loadDashboardSummary({ silent: true }),
+          loadDashboardDetails({ silent: true }),
+          loadDashboardOrders({ silent: true }),
+        ]);
+        toast.success(`Product "${deleted.name}" deleted successfully!`);
+      })
+      .catch((error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Product could not be deleted.",
+        );
+      });
+  };
+
+  const handleEditCustomer = () => {
+    if (!selectedEditCustomer) {
+      return;
+    }
+
+    if (!canMutateCatalog) {
+      toast.info(
+        "Customer updates are read-only for connected databases right now.",
+      );
+      return;
+    }
+
+    if (!customerForm.name || !customerForm.email) {
+      toast.error("Customer name and email are required.");
+      return;
+    }
+
+    api
+      .updateDashboardCustomer(selectedEditCustomer.id, {
+        name: customerForm.name.trim(),
+        email: customerForm.email.trim(),
+        phone: customerForm.phone.trim(),
+      })
+      .then(async ({ customer }) => {
+        setShowEditCustomerDialog(false);
+        setSelectedEditCustomer(null);
+        setCustomerForm({ name: "", email: "", phone: "" });
+        await Promise.all([
+          loadDashboardSummary({ silent: true }),
+          loadDashboardDetails({ silent: true }),
+          loadDashboardOrders({ silent: true }),
+        ]);
+        toast.success(`Customer "${customer.name}" updated successfully!`);
+      })
+      .catch((error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Customer could not be updated.",
+        );
+      });
+  };
+
+  const handleDeleteCustomer = (customer: Customer) => {
+    if (!canMutateCatalog) {
+      toast.info(
+        "Customer updates are read-only for connected databases right now.",
+      );
+      return;
+    }
+
+    api
+      .deleteDashboardCustomer(customer.id)
+      .then(async ({ customer: deleted }) => {
+        await Promise.all([
+          loadDashboardSummary({ silent: true }),
+          loadDashboardDetails({ silent: true }),
+          loadDashboardOrders({ silent: true }),
+        ]);
+        toast.success(`Customer "${deleted.name}" deleted successfully!`);
+      })
+      .catch((error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Customer could not be deleted.",
+        );
+      });
   };
 
   const handleSettings = () => {
@@ -1239,6 +1482,7 @@ export function DashboardPage({
     .slice(0, 5);
 
   const fallbackRecentCustomers = [...customers].slice(0, 5);
+  const fallbackOrders = orders;
   const catalogProducts =
     dashboardDetails?.available && dashboardDetails.products
       ? dashboardDetails.products
@@ -1252,6 +1496,13 @@ export function DashboardPage({
     dashboardDetails.inventory?.products
       ? dashboardDetails.inventory.products
       : products.filter((product) => product.stock > 0);
+  const orderHistory =
+    dashboardOrders?.available && dashboardOrders.orders
+      ? dashboardOrders.orders
+      : fallbackOrders;
+  const orderableProducts = catalogProducts.filter(
+    (product) => product.stock > 0,
+  );
   const inventorySummary =
     dashboardDetails?.available && dashboardDetails.inventory
       ? dashboardDetails.inventory
@@ -1269,15 +1520,29 @@ export function DashboardPage({
             ),
           products: products.filter((product) => product.stock > 0),
         };
-  const canMutateCatalog = !dashboardDetails?.available;
+  const isConnectedReadOnlySource = Boolean(
+    currentConnection &&
+      ["postgresql", "mysql", "oracle"].includes(
+        currentConnection.databaseType,
+      ),
+  );
+  const canMutateCatalog = !isConnectedReadOnlySource;
+  const usingImplicitDemoDatabase =
+    !currentConnection && dashboardDetails?.available;
   const connectionTypeLabel = currentConnection?.databaseType
     ? currentConnection.databaseType.toUpperCase()
-    : "Not Connected";
+    : usingImplicitDemoDatabase
+      ? "SQLITE"
+      : "Not Connected";
   const connectionStatusLabel = currentConnection
     ? currentConnection.isDemoConnection
       ? "Demo Database"
-      : "Connected"
-    : "Not Connected";
+      : isConnectedReadOnlySource
+        ? "Connected (Read Only)"
+        : "Connected"
+    : usingImplicitDemoDatabase
+      ? "Demo Database"
+      : "Not Connected";
   const connectionNameLabel = currentConnection
     ? currentConnection.databaseType === "sqlite"
       ? currentConnection.filePath || currentConnection.databaseName || "SQLite"
@@ -1288,7 +1553,9 @@ export function DashboardPage({
         ]
           .filter(Boolean)
           .join(" / ")
-    : "No active source";
+    : usingImplicitDemoDatabase
+      ? "demo-retail-analytics.sqlite"
+      : "No active source";
   const salesData = dashboardSummary?.available && dashboardSummary.salesData
     ? dashboardSummary.salesData
     : fallbackSalesData;
@@ -1380,6 +1647,16 @@ export function DashboardPage({
               <MessageSquare className="h-4 w-4 mr-2" />
               Ask Orrico
             </Button>
+            <Button
+              onClick={() => setShowNewOrderDialog(true)}
+              size="sm"
+              variant="outline"
+              className="w-full justify-start"
+              disabled={!canMutateCatalog}
+            >
+              <ShoppingCart className="h-4 w-4 mr-2" />
+              New Order
+            </Button>
           </div>
         </div>
 
@@ -1418,6 +1695,17 @@ export function DashboardPage({
             >
               <Users className="h-4 w-4 mr-2" />
               Customers
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`w-full justify-start rounded-xl ${
+                activeNavItem === "orders" ? "bg-accent shadow-sm" : "hover:bg-card/70"
+              }`}
+              onClick={() => handleNavigation("orders")}
+            >
+              <ShoppingCart className="h-4 w-4 mr-2" />
+              Orders
             </Button>
             <Button
               variant="ghost"
@@ -1472,12 +1760,14 @@ export function DashboardPage({
                 {activeNavItem === "dashboard" && "Dashboard"}
                 {activeNavItem === "products" && "Products"}
                 {activeNavItem === "customers" && "Customers"}
+                {activeNavItem === "orders" && "Orders"}
                 {activeNavItem === "inventory" && "Inventory"}
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
                 {activeNavItem === "dashboard" && "Welcome back! Here's what's happening with your store today."}
                 {activeNavItem === "products" && "View and manage all your products"}
                 {activeNavItem === "customers" && "Manage your customer relationships"}
+                {activeNavItem === "orders" && "Track recent orders and customer purchases"}
                 {activeNavItem === "inventory" && "Monitor stock levels and inventory"}
               </p>
             </div>
@@ -1784,6 +2074,7 @@ export function DashboardPage({
                       <TableHead>Units Sold</TableHead>
                       <TableHead>Revenue Generated</TableHead>
                       <TableHead>Availability</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1813,6 +2104,26 @@ export function DashboardPage({
                             </Badge>
                           )}
                         </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEditProductDialog(product)}
+                              disabled={!canMutateCatalog}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteProduct(product)}
+                              disabled={!canMutateCatalog}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1839,6 +2150,7 @@ export function DashboardPage({
                       <TableHead>Orders</TableHead>
                       <TableHead>Total Spent</TableHead>
                       <TableHead>Last Order</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1856,10 +2168,108 @@ export function DashboardPage({
                         <TableCell className="text-muted-foreground">
                           {customer.lastOrder}
                         </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEditCustomerDialog(customer)}
+                              disabled={!canMutateCatalog}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteCustomer(customer)}
+                              disabled={!canMutateCatalog}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeNavItem === "orders" && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <CardTitle>Recent Orders</CardTitle>
+                    <CardDescription>
+                      Order activity from your connected retail data source
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={() => setShowNewOrderDialog(true)}
+                    disabled={!canMutateCatalog}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Order
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {orderHistory.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Order ID</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Items</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orderHistory.map((order) => (
+                        <TableRow key={order.id}>
+                          <TableCell className="font-medium">
+                            {order.id}
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <div>{order.customerName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {order.customerEmail}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{order.productName}</TableCell>
+                          <TableCell>{order.quantity}</TableCell>
+                          <TableCell>
+                            Rs {order.total.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {order.date}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-12">
+                    <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="font-medium mb-2">No orders yet</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Orders will appear here once they are created.
+                    </p>
+                    <Button
+                      onClick={() => setShowNewOrderDialog(true)}
+                      disabled={!canMutateCatalog}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Order
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -1946,6 +2356,7 @@ export function DashboardPage({
                           <TableHead>Current Stock</TableHead>
                           <TableHead>Stock Value</TableHead>
                           <TableHead>Status</TableHead>
+                          <TableHead>Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1989,6 +2400,16 @@ export function DashboardPage({
                                   In Stock
                                 </Badge>
                               )}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openStockDialog(product)}
+                                disabled={!canMutateCatalog}
+                              >
+                                Adjust
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -2106,6 +2527,176 @@ export function DashboardPage({
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={showEditProductDialog}
+        onOpenChange={setShowEditProductDialog}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+            <DialogDescription>
+              Update the selected product details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="editProductName">Product Name</Label>
+              <Input
+                id="editProductName"
+                placeholder="Enter product name"
+                value={newProduct.name}
+                onChange={(e) =>
+                  setNewProduct({ ...newProduct, name: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editCategory">Category</Label>
+              <Select
+                value={newProduct.category}
+                onValueChange={(value) =>
+                  setNewProduct({ ...newProduct, category: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Mobile Phones">Mobile Phones</SelectItem>
+                  <SelectItem value="Laptops">Laptops</SelectItem>
+                  <SelectItem value="Televisions">Televisions</SelectItem>
+                  <SelectItem value="Audio Devices">Audio Devices</SelectItem>
+                  <SelectItem value="Computer Accessories">Computer Accessories</SelectItem>
+                  <SelectItem value="Mobile Accessories">Mobile Accessories</SelectItem>
+                  <SelectItem value="Printers & Scanners">Printers & Scanners</SelectItem>
+                  <SelectItem value="Smart Watches">Smart Watches</SelectItem>
+                  <SelectItem value="Cameras">Cameras</SelectItem>
+                  <SelectItem value="Gaming">Gaming</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="editPrice">Price (Rs)</Label>
+                <Input
+                  id="editPrice"
+                  type="number"
+                  placeholder="0"
+                  value={newProduct.price}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, price: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editStock">Stock</Label>
+                <Input
+                  id="editStock"
+                  type="number"
+                  placeholder="0"
+                  value={newProduct.stock}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, stock: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEditProductDialog(false);
+                setSelectedEditProduct(null);
+                setNewProduct({ name: "", category: "", price: "", stock: "" });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEditProduct}
+              disabled={!canMutateCatalog}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showEditCustomerDialog}
+        onOpenChange={setShowEditCustomerDialog}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Customer</DialogTitle>
+            <DialogDescription>
+              Update customer details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="editCustomerName">Customer Name</Label>
+              <Input
+                id="editCustomerName"
+                value={customerForm.name}
+                onChange={(event) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    name: event.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editCustomerEmail">Email</Label>
+              <Input
+                id="editCustomerEmail"
+                type="email"
+                value={customerForm.email}
+                onChange={(event) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    email: event.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editCustomerPhone">Phone</Label>
+              <Input
+                id="editCustomerPhone"
+                value={customerForm.phone}
+                onChange={(event) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    phone: event.target.value,
+                  })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEditCustomerDialog(false);
+                setSelectedEditCustomer(null);
+                setCustomerForm({ name: "", email: "", phone: "" });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEditCustomer}
+              disabled={!canMutateCatalog}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showNewOrderDialog} onOpenChange={setShowNewOrderDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -2153,7 +2744,7 @@ export function DashboardPage({
                     <SelectValue placeholder="Select customer" />
                   </SelectTrigger>
                   <SelectContent>
-                    {customers.map((customer) => (
+                    {catalogCustomers.map((customer) => (
                       <SelectItem key={customer.id} value={customer.id}>
                         {customer.name} - {customer.email}
                       </SelectItem>
@@ -2214,7 +2805,7 @@ export function DashboardPage({
                   <SelectValue placeholder="Select product" />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.map((product) => (
+                  {orderableProducts.map((product) => (
                     <SelectItem key={product.id} value={product.id}>
                       {product.name} - Rs {product.price.toLocaleString()} (Stock: {product.stock})
                     </SelectItem>
@@ -2244,7 +2835,7 @@ export function DashboardPage({
                   <span className="text-2xl font-bold">
                     Rs{" "}
                     {(
-                      (products.find((p) => p.id === newOrder.productId)
+                      (catalogProducts.find((p) => p.id === newOrder.productId)
                         ?.price || 0) * parseInt(newOrder.quantity || "1")
                     ).toLocaleString()}
                   </span>
@@ -2270,8 +2861,62 @@ export function DashboardPage({
             >
               Cancel
             </Button>
-            <Button onClick={handleNewOrder}>
+            <Button
+              onClick={handleNewOrder}
+              disabled={!canMutateCatalog}
+            >
               {newOrder.isNewCustomer ? "Add Customer & Create Order" : "Create Order"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showStockDialog} onOpenChange={setShowStockDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adjust Stock</DialogTitle>
+            <DialogDescription>
+              Update the current stock level for this product
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="rounded-lg border p-4">
+              <div className="font-medium">
+                {selectedStockProduct?.name || "Selected product"}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {selectedStockProduct?.category || ""}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stockAdjustment">Stock Level</Label>
+              <Input
+                id="stockAdjustment"
+                type="number"
+                min="0"
+                value={stockAdjustmentValue}
+                onChange={(event) =>
+                  setStockAdjustmentValue(event.target.value)
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowStockDialog(false);
+                setSelectedStockProduct(null);
+                setStockAdjustmentValue("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateStock}
+              disabled={!canMutateCatalog}
+            >
+              Update Stock
             </Button>
           </DialogFooter>
         </DialogContent>

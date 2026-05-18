@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   Card,
@@ -44,18 +44,42 @@ interface SignupForm {
   agreeToTerms: boolean;
 }
 
+interface VerificationForm {
+  email: string;
+  token: string;
+}
+
+interface ForgotPasswordForm {
+  email: string;
+}
+
+interface ResetPasswordForm {
+  email: string;
+  token: string;
+  password: string;
+  confirmPassword: string;
+}
+
 interface AuthPageProps {
   onBackToHome?: () => void;
   onNavigateToSupport?: () => void;
   onLogin?: () => void;
+  initialMode?: "verify" | "reset";
+  initialEmail?: string;
+  initialToken?: string;
 }
 
 export function AuthPage({
   onBackToHome,
   onNavigateToSupport,
   onLogin,
+  initialMode,
+  initialEmail,
+  initialToken,
 }: AuthPageProps) {
-  const [isLogin, setIsLogin] = useState(true);
+  const [authMode, setAuthMode] = useState<
+    "login" | "signup" | "verify" | "forgot" | "reset"
+  >(initialMode || "login");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] =
     useState(false);
@@ -63,6 +87,30 @@ export function AuthPage({
 
   const loginForm = useForm<LoginForm>();
   const signupForm = useForm<SignupForm>();
+  const verificationForm = useForm<VerificationForm>();
+  const forgotPasswordForm = useForm<ForgotPasswordForm>();
+  const resetPasswordForm = useForm<ResetPasswordForm>();
+  const isLogin = authMode === "login";
+  const isSignup = authMode === "signup";
+
+  useEffect(() => {
+    if (initialEmail) {
+      verificationForm.setValue("email", initialEmail);
+      forgotPasswordForm.setValue("email", initialEmail);
+      resetPasswordForm.setValue("email", initialEmail);
+    }
+
+    if (initialToken) {
+      verificationForm.setValue("token", initialToken);
+      resetPasswordForm.setValue("token", initialToken);
+    }
+  }, [
+    forgotPasswordForm,
+    initialEmail,
+    initialToken,
+    resetPasswordForm,
+    verificationForm,
+  ]);
 
   const persistSession = (token: string, user: unknown) => {
     safeStorageSet("orrico_auth_token", token);
@@ -131,21 +179,119 @@ export function AuthPage({
         password: data.password,
       });
 
-      persistSession(session.token, session.user);
-
       setIsLoading(false);
-      toast.success(
-        "Account created successfully! Redirecting to your dashboard...",
+      verificationForm.setValue("email", data.email);
+      verificationForm.setValue(
+        "token",
+        session.verificationToken || "",
       );
-      setTimeout(() => {
-        onLogin?.();
-      }, 1000);
+      setAuthMode("verify");
+      toast.success(
+        session.verificationToken
+          ? "Account created. Verify the email using the token shown in development."
+          : "Account created. Verify your email to continue.",
+      );
     } catch (error) {
       setIsLoading(false);
       toast.error(
         error instanceof Error
           ? error.message
           : "Account creation failed. Please try again.",
+      );
+    }
+  };
+
+  const onVerifySubmit = async (data: VerificationForm) => {
+    setIsLoading(true);
+
+    try {
+      const session = await api.confirmEmailVerification(
+        data.email,
+        data.token,
+      );
+      persistSession(session.token, session.user);
+      setIsLoading(false);
+      toast.success("Email verified. Redirecting to your dashboard...");
+      setTimeout(() => {
+        onLogin?.();
+      }, 800);
+    } catch (error) {
+      setIsLoading(false);
+      const authError = error as Error & {
+        status?: number;
+        details?: {
+          requiresEmailVerification?: boolean;
+          email?: string;
+          verificationToken?: string;
+        };
+      };
+      if (authError.status === 403 && authError.details?.requiresEmailVerification) {
+        verificationForm.setValue(
+          "email",
+          authError.details.email || data.email,
+        );
+        verificationForm.setValue(
+          "token",
+          authError.details.verificationToken || "",
+        );
+        setAuthMode("verify");
+      }
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Email verification failed.",
+      );
+    }
+  };
+
+  const onForgotPasswordSubmit = async (data: ForgotPasswordForm) => {
+    setIsLoading(true);
+
+    try {
+      const result = await api.requestPasswordReset(data.email);
+      setIsLoading(false);
+      resetPasswordForm.setValue("email", data.email);
+      resetPasswordForm.setValue("token", result.resetToken || "");
+      setAuthMode("reset");
+      toast.success(result.message);
+    } catch (error) {
+      setIsLoading(false);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Password reset request failed.",
+      );
+    }
+  };
+
+  const onResetPasswordSubmit = async (
+    data: ResetPasswordForm,
+  ) => {
+    if (data.password !== data.confirmPassword) {
+      resetPasswordForm.setError("confirmPassword", {
+        message: "Passwords do not match",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const result = await api.confirmPasswordReset(
+        data.email,
+        data.token,
+        data.password,
+      );
+      setIsLoading(false);
+      setAuthMode("login");
+      loginForm.setValue("email", data.email);
+      toast.success(result.message);
+    } catch (error) {
+      setIsLoading(false);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Password reset failed.",
       );
     }
   };
@@ -232,12 +378,23 @@ export function AuthPage({
             <Card className="border-border/70 bg-card/92 shadow-[0_30px_80px_-36px_rgba(15,23,42,0.4)]">
               <CardHeader className="space-y-4 text-center">
                 <CardTitle className="text-2xl">
-                  {isLogin ? "Welcome Back" : "Create Account"}
+                  {authMode === "login" && "Welcome Back"}
+                  {authMode === "signup" && "Create Account"}
+                  {authMode === "verify" && "Verify Email"}
+                  {authMode === "forgot" && "Reset Password"}
+                  {authMode === "reset" && "Choose New Password"}
                 </CardTitle>
                 <CardDescription className="text-base">
-                  {isLogin
-                    ? "Sign in to access your retail analytics dashboard"
-                    : "Start your journey to smarter business decisions"}
+                  {authMode === "login" &&
+                    "Sign in to access your retail analytics dashboard"}
+                  {authMode === "signup" &&
+                    "Start your journey to smarter business decisions"}
+                  {authMode === "verify" &&
+                    "Enter the verification token to activate your account"}
+                  {authMode === "forgot" &&
+                    "Request a reset token for your account"}
+                  {authMode === "reset" &&
+                    "Set a new password using your reset token"}
                 </CardDescription>
                 {isLogin && (
                   <div className="rounded-2xl border border-border/70 bg-muted/60 p-4 text-sm text-left">
@@ -255,7 +412,7 @@ export function AuthPage({
               </CardHeader>
 
               <CardContent className="space-y-6">
-                {isLogin ? (
+                {authMode === "login" && (
                   <form
                     onSubmit={loginForm.handleSubmit(
                       onLoginSubmit,
@@ -349,6 +506,14 @@ export function AuthPage({
                       <Button
                         variant="link"
                         className="p-0 h-auto"
+                        type="button"
+                        onClick={() => {
+                          forgotPasswordForm.setValue(
+                            "email",
+                            loginForm.getValues("email") || "",
+                          );
+                          setAuthMode("forgot");
+                        }}
                       >
                         Forgot password?
                       </Button>
@@ -378,7 +543,9 @@ export function AuthPage({
                       </Button>
                     </div>
                   </form>
-                ) : (
+                )}
+
+                {authMode === "signup" && (
                   <form
                     onSubmit={signupForm.handleSubmit(
                       onSignupSubmit,
@@ -643,19 +810,206 @@ export function AuthPage({
                   </form>
                 )}
 
-                <div className="text-center">
-                  <span className="text-muted-foreground">
-                    {isLogin
-                      ? "Don't have an account?"
-                      : "Already have an account?"}
-                  </span>{" "}
-                  <Button
-                    variant="link"
-                    className="p-0 h-auto"
-                    onClick={() => setIsLogin(!isLogin)}
+                {authMode === "verify" && (
+                  <form
+                    onSubmit={verificationForm.handleSubmit(
+                      onVerifySubmit,
+                    )}
+                    className="space-y-5"
                   >
-                    {isLogin ? "Sign up" : "Sign in"}
-                  </Button>
+                    <div className="space-y-2">
+                      <Label htmlFor="verifyEmail">Email Address</Label>
+                      <Input
+                        id="verifyEmail"
+                        type="email"
+                        placeholder="owner@dukaan.in"
+                        {...verificationForm.register("email", {
+                          required: "Email is required",
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="verifyToken">Verification Token</Label>
+                      <Input
+                        id="verifyToken"
+                        placeholder="Enter verification token"
+                        {...verificationForm.register("token", {
+                          required: "Verification token is required",
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={isLoading}
+                      >
+                        {isLoading ? "Verifying..." : "Verify Email"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        disabled={isLoading}
+                        onClick={async () => {
+                          const email = verificationForm.getValues("email");
+                          if (!email) {
+                            toast.error("Enter your email first.");
+                            return;
+                          }
+                          const result =
+                            await api.requestEmailVerification(email);
+                          if (result.verificationToken) {
+                            verificationForm.setValue(
+                              "token",
+                              result.verificationToken,
+                            );
+                          }
+                          toast.success(result.message);
+                        }}
+                      >
+                        Resend Verification
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+                {authMode === "forgot" && (
+                  <form
+                    onSubmit={forgotPasswordForm.handleSubmit(
+                      onForgotPasswordSubmit,
+                    )}
+                    className="space-y-5"
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="forgotEmail">Email Address</Label>
+                      <Input
+                        id="forgotEmail"
+                        type="email"
+                        placeholder="owner@dukaan.in"
+                        {...forgotPasswordForm.register("email", {
+                          required: "Email is required",
+                        })}
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading}
+                    >
+                      {isLoading
+                        ? "Preparing Reset..."
+                        : "Send Reset Token"}
+                    </Button>
+                  </form>
+                )}
+
+                {authMode === "reset" && (
+                  <form
+                    onSubmit={resetPasswordForm.handleSubmit(
+                      onResetPasswordSubmit,
+                    )}
+                    className="space-y-5"
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="resetEmail">Email Address</Label>
+                      <Input
+                        id="resetEmail"
+                        type="email"
+                        placeholder="owner@dukaan.in"
+                        {...resetPasswordForm.register("email", {
+                          required: "Email is required",
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="resetToken">Reset Token</Label>
+                      <Input
+                        id="resetToken"
+                        placeholder="Enter reset token"
+                        {...resetPasswordForm.register("token", {
+                          required: "Reset token is required",
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="resetPassword">New Password</Label>
+                      <Input
+                        id="resetPassword"
+                        type="password"
+                        placeholder="Enter new password"
+                        {...resetPasswordForm.register("password", {
+                          required: "Password is required",
+                          minLength: {
+                            value: 8,
+                            message: "Password must be at least 8 characters",
+                          },
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="resetConfirmPassword">Confirm Password</Label>
+                      <Input
+                        id="resetConfirmPassword"
+                        type="password"
+                        placeholder="Confirm new password"
+                        {...resetPasswordForm.register("confirmPassword", {
+                          required: "Please confirm your password",
+                        })}
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading}
+                    >
+                      {isLoading
+                        ? "Updating Password..."
+                        : "Update Password"}
+                    </Button>
+                  </form>
+                )}
+
+                <div className="text-center">
+                  {authMode === "login" && (
+                    <>
+                      <span className="text-muted-foreground">
+                        Don't have an account?
+                      </span>{" "}
+                      <Button
+                        variant="link"
+                        className="p-0 h-auto"
+                        onClick={() => setAuthMode("signup")}
+                      >
+                        Sign up
+                      </Button>
+                    </>
+                  )}
+                  {authMode === "signup" && (
+                    <>
+                      <span className="text-muted-foreground">
+                        Already have an account?
+                      </span>{" "}
+                      <Button
+                        variant="link"
+                        className="p-0 h-auto"
+                        onClick={() => setAuthMode("login")}
+                      >
+                        Sign in
+                      </Button>
+                    </>
+                  )}
+                  {(authMode === "verify" ||
+                    authMode === "forgot" ||
+                    authMode === "reset") && (
+                    <Button
+                      variant="link"
+                      className="p-0 h-auto"
+                      onClick={() => setAuthMode("login")}
+                    >
+                      Back to sign in
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

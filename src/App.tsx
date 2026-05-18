@@ -26,8 +26,27 @@ export default function App() {
   const [currentPage, setCurrentPage] =
     useState<Page>("landing");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authContext, setAuthContext] = useState<{
+    mode?: "verify" | "reset";
+    email?: string;
+    token?: string;
+  }>({});
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const authMode = params.get("auth");
+    const email = params.get("email") || "";
+    const token = params.get("token") || "";
+
+    if (authMode === "verify" || authMode === "reset") {
+      setAuthContext({
+        mode: authMode,
+        email,
+        token,
+      });
+      setCurrentPage("auth");
+    }
+
     const authToken = safeStorageGet("orrico_auth_token");
 
     if (!authToken) {
@@ -89,6 +108,9 @@ export default function App() {
         )}
         {currentPage === "auth" && (
           <AuthPage
+            initialMode={authContext.mode}
+            initialEmail={authContext.email}
+            initialToken={authContext.token}
             onBackToHome={() => setCurrentPage("landing")}
             onNavigateToSupport={() =>
               setCurrentPage("support")

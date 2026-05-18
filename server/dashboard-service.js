@@ -71,6 +71,18 @@ function getDateOnlyExpression(dialect, column) {
   return `date(${column})`;
 }
 
+function getOrderItemsSummaryExpression(dialect) {
+  if (dialect === "postgresql") {
+    return "STRING_AGG(CAST(oi.quantity AS TEXT) || 'x ' || p.name, ', ')";
+  }
+
+  if (dialect === "mysql") {
+    return "GROUP_CONCAT(CONCAT(CAST(oi.quantity AS CHAR), 'x ', p.name) SEPARATOR ', ')";
+  }
+
+  return "GROUP_CONCAT(CAST(oi.quantity AS TEXT) || 'x ' || p.name, ', ')";
+}
+
 function formatCurrency(value) {
   return `Rs ${Math.round(Number(value || 0)).toLocaleString("en-IN")}`;
 }
@@ -437,5 +449,88 @@ export async function getDashboardDetails(connection) {
       totalStockValue: inventoryValue,
       products: inStockProducts,
     },
+  };
+}
+
+export async function getDashboardCustomers(connection) {
+  const details = await getDashboardDetails(connection);
+
+  return {
+    available: details.available,
+    reason: details.reason,
+    schema: details.schema,
+    customers: details.customers || [],
+  };
+}
+
+export async function getDashboardOrders(connection, limit = 50) {
+  const overview = await getSchemaOverviewForConnection(connection);
+
+  if (!hasRetailSchema(overview.schema)) {
+    return buildUnavailableDashboardResponse(overview);
+  }
+
+  const safeLimit = Math.max(
+    1,
+    Math.min(Number.parseInt(String(limit || 50), 10) || 50, 200),
+  );
+  const dialect = getDialect(connection);
+  const orderRows = await executeReadOnlyQuery(
+    connection,
+    `
+      SELECT
+        o.id,
+        o.customer_id,
+        c.name AS customer_name,
+        c.email AS customer_email,
+        c.phone AS customer_phone,
+        ${getOrderItemsSummaryExpression(dialect)} AS product_name,
+        COALESCE(SUM(oi.quantity), 0) AS quantity,
+        o.total_amount AS total,
+        o.ordered_at AS date
+      FROM orders o
+      INNER JOIN customers c ON c.id = o.customer_id
+      INNER JOIN order_items oi ON oi.order_id = o.id
+      INNER JOIN products p ON p.id = oi.product_id
+      GROUP BY
+        o.id,
+        o.customer_id,
+        c.name,
+        c.email,
+        c.phone,
+        o.total_amount,
+        o.ordered_at
+      ORDER BY o.ordered_at DESC
+      LIMIT ${safeLimit}
+    `,
+  );
+
+  const orders = orderRows.map((row) => ({
+    id: String(row.id),
+    customerId: String(row.customer_id),
+    customerName: row.customer_name,
+    customerEmail: row.customer_email,
+    customerPhone: row.customer_phone || "",
+    productId: "",
+    productName: row.product_name || "",
+    quantity: Number(row.quantity || 0),
+    total: Number(row.total || 0),
+    date: row.date
+      ? new Date(String(row.date)).toLocaleString(
+          "en-IN",
+          {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          },
+        )
+      : "",
+  }));
+
+  return {
+    available: true,
+    orders,
   };
 }

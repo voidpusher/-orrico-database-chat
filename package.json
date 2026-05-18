@@ -75,6 +75,7 @@
     "dev:client": "parcel index.html --host 127.0.0.1 --port 3000",
     "dev:server": "node server/index.js",
     "build": "parcel build index.html",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "test": "node --test"
   }
 }
