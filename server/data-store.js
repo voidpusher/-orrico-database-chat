@@ -182,8 +182,36 @@ function openSqliteDatabase() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
+  ensureSqliteColumn(
+    database,
+    "users",
+    "email_verified_at",
+    "TEXT",
+  );
 
   return database;
+}
+
+function ensureSqliteColumn(
+  database,
+  tableName,
+  columnName,
+  columnDefinition,
+) {
+  const columns = database.prepare(
+    `PRAGMA table_info(${tableName})`,
+  ).all();
+  const hasColumn = columns.some(
+    (column) => column.name === columnName,
+  );
+
+  if (hasColumn) {
+    return;
+  }
+
+  database.exec(
+    `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`,
+  );
 }
 
 function mapSqliteUsers(database) {

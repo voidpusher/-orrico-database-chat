@@ -119,6 +119,7 @@ export function DatabaseConnectionPage({
     safeStorageGet("orrico_current_user"),
     {},
   );
+  const isDemoUser = currentUser.authProvider === "demo";
 
   const form = useForm<DatabaseForm>({
     defaultValues: {
@@ -248,6 +249,11 @@ export function DatabaseConnectionPage({
   };
 
   const skipConnection = () => {
+    if (!isDemoUser) {
+      toast.error("Finish your new shop setup before continuing.");
+      return;
+    }
+
     toast.info("You can configure database connection later from settings.");
     onComplete();
   };
@@ -319,12 +325,16 @@ export function DatabaseConnectionPage({
               <Database className="w-8 h-8 text-primary" />
             </div>
             <h1 className="text-4xl font-semibold tracking-tight">
-              Welcome{hasExistingConnection ? " back" : ""}, {currentUser.firstName}!
+              {isDemoUser
+                ? `Welcome${hasExistingConnection ? " back" : ""}, ${currentUser.firstName}!`
+                : `Set up your shop${hasExistingConnection ? "" : ""}, ${currentUser.firstName}!`}
             </h1>
             <p className="mx-auto max-w-2xl text-lg leading-8 text-muted-foreground lg:text-xl">
-              {hasExistingConnection 
-                ? "You already have a database connection configured. You can proceed or reconfigure your connection below."
-                : "Let's connect to your database to enable voice-powered queries and real-time analytics for your retail business."
+              {hasExistingConnection
+                ? "You already have a database connection configured. You can continue with it or update the connection below."
+                : isDemoUser
+                  ? "This demo workspace stays separate from real accounts. Connect the demo source or continue exploring with the preloaded sample business."
+                  : "This account starts fresh. Connect your own database or import shop data to activate chat, analytics, and dashboard workflows."
               }
             </p>
           </div>
@@ -415,9 +425,12 @@ export function DatabaseConnectionPage({
                         size="sm"
                         onClick={useDemoCredentials}
                         className="gap-2"
+                        disabled={!isDemoUser}
                       >
                         <Sparkles className="w-4 h-4" />
-                        Use Demo Credentials
+                        {isDemoUser
+                          ? "Use Demo Credentials"
+                          : "Demo Only"}
                       </Button>
                     </div>
 
@@ -540,9 +553,12 @@ export function DatabaseConnectionPage({
                         size="sm"
                         onClick={useDemoCredentials}
                         className="gap-2"
+                        disabled={!isDemoUser}
                       >
                         <Sparkles className="w-4 h-4" />
-                        Use Demo Database
+                        {isDemoUser
+                          ? "Use Demo Database"
+                          : "Demo Only"}
                       </Button>
                     </div>
 
@@ -671,7 +687,7 @@ export function DatabaseConnectionPage({
                     onClick={skipConnection}
                     disabled={isLoading}
                   >
-                    Skip for Now
+                    {isDemoUser ? "Skip for Now" : "Setup Required"}
                   </Button>
                 </div>
               </form>
@@ -707,10 +723,13 @@ export function DatabaseConnectionPage({
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <h4 className="font-medium text-blue-900">Try with Demo Data</h4>
+                    <h4 className="font-medium text-blue-900">
+                      {isDemoUser ? "Demo Workspace" : "New Shop Setup"}
+                    </h4>
                     <p className="text-sm text-blue-700">
-                      Use our demo credentials to explore Orrico with pre-loaded
-                      retail data including products, sales, and inventory.
+                      {isDemoUser
+                        ? "This lane stays on preloaded sample retail data so you can explore the product safely without touching live business records."
+                        : "Real accounts begin with an empty shop setup. Connect your own source or import CSV data before using the live dashboard and chat."}
                     </p>
                   </div>
                 </div>

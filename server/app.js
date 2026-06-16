@@ -167,6 +167,13 @@ function sanitizeConnection(connection) {
   };
 }
 
+function canUseDemoWorkspace(user, connection) {
+  return (
+    user?.authProvider === "demo" ||
+    Boolean(connection?.isDemoConnection)
+  );
+}
+
 function prepareConnectionForStorage(connection) {
   return {
     ...connection,
@@ -1018,6 +1025,14 @@ app.get("/api/database/schema", async (request, response) => {
       (entry) => entry.userId === session.user.id,
     ) || null;
 
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before exploring schema details.",
+    });
+    return;
+  }
+
   try {
     if (
       connection &&
@@ -1218,6 +1233,14 @@ app.get("/api/dashboard/summary", async (request, response) => {
       (entry) => entry.userId === session.user.id,
     ) || null;
 
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before opening the dashboard.",
+    });
+    return;
+  }
+
   try {
     const summary = await getDashboardSummary(
       prepareConnectionForUse(connection),
@@ -1246,6 +1269,14 @@ app.get("/api/dashboard/details", async (request, response) => {
       (entry) => entry.userId === session.user.id,
     ) || null;
 
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before opening the dashboard.",
+    });
+    return;
+  }
+
   try {
     const details = await getDashboardDetails(
       prepareConnectionForUse(connection),
@@ -1273,6 +1304,14 @@ app.get("/api/dashboard/orders", async (request, response) => {
     session.data.databaseConnections.find(
       (entry) => entry.userId === session.user.id,
     ) || null;
+
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before viewing orders.",
+    });
+    return;
+  }
 
   try {
     const orders = await getDashboardOrders(
@@ -1303,6 +1342,14 @@ app.get("/api/dashboard/customers", async (request, response) => {
       (entry) => entry.userId === session.user.id,
     ) || null;
 
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before viewing customers.",
+    });
+    return;
+  }
+
   try {
     const customers = await getDashboardCustomers(
       prepareConnectionForUse(connection),
@@ -1330,6 +1377,14 @@ app.post("/api/dashboard/products", async (request, response) => {
     session.data.databaseConnections.find(
       (entry) => entry.userId === session.user.id,
     ) || null;
+
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before updating products.",
+    });
+    return;
+  }
 
   try {
     const product = createRetailProduct(
@@ -1359,6 +1414,14 @@ app.patch("/api/dashboard/products/:productId", async (request, response) => {
     session.data.databaseConnections.find(
       (entry) => entry.userId === session.user.id,
     ) || null;
+
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before updating products.",
+    });
+    return;
+  }
 
   try {
     const product = updateRetailProduct(
@@ -1392,6 +1455,14 @@ app.patch("/api/dashboard/products/:productId/stock", async (request, response) 
       (entry) => entry.userId === session.user.id,
     ) || null;
 
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before updating products.",
+    });
+    return;
+  }
+
   try {
     const product = updateRetailProductStock(
       prepareConnectionForUse(connection),
@@ -1424,6 +1495,14 @@ app.delete("/api/dashboard/products/:productId", async (request, response) => {
       (entry) => entry.userId === session.user.id,
     ) || null;
 
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before updating products.",
+    });
+    return;
+  }
+
   try {
     const product = deleteRetailProduct(
       prepareConnectionForUse(connection),
@@ -1454,6 +1533,14 @@ app.patch("/api/dashboard/customers/:customerId", async (request, response) => {
     session.data.databaseConnections.find(
       (entry) => entry.userId === session.user.id,
     ) || null;
+
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before updating customers.",
+    });
+    return;
+  }
 
   try {
     const customer = updateRetailCustomer(
@@ -1487,6 +1574,14 @@ app.delete("/api/dashboard/customers/:customerId", async (request, response) => 
       (entry) => entry.userId === session.user.id,
     ) || null;
 
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before updating customers.",
+    });
+    return;
+  }
+
   try {
     const customer = deleteRetailCustomer(
       prepareConnectionForUse(connection),
@@ -1517,6 +1612,14 @@ app.post("/api/dashboard/orders", async (request, response) => {
     session.data.databaseConnections.find(
       (entry) => entry.userId === session.user.id,
     ) || null;
+
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before creating orders.",
+    });
+    return;
+  }
 
   try {
     const result = createRetailOrder(
@@ -1570,6 +1673,14 @@ app.post("/api/chat/message", chatRateLimit, async (request, response) => {
     session.data.databaseConnections.find(
       (entry) => entry.userId === session.user.id,
     ) || null;
+
+  if (!connection && !canUseDemoWorkspace(session.user, connection)) {
+    response.status(400).json({
+      error:
+        "Complete your new shop setup before starting chat queries.",
+    });
+    return;
+  }
   let result;
 
   try {

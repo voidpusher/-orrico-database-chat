@@ -132,6 +132,19 @@ function getStoredCurrentUser() {
   return safeJsonParse(storedUser, null);
 }
 
+function isDemoSession() {
+  const token = safeStorageGet("orrico_auth_token");
+  const user = getStoredCurrentUser() as
+    | { authProvider?: string; email?: string }
+    | null;
+
+  return (
+    token === LOCAL_DEMO_TOKEN ||
+    user?.authProvider === "demo" ||
+    user?.email === DEMO_EMAIL
+  );
+}
+
 export interface DashboardMetricResponse {
   title: string;
   value: string;
@@ -425,6 +438,12 @@ export const api = {
         authenticated: true,
       });
     } catch {
+      if (!isDemoSession()) {
+        throw new Error(
+          "Shop setup could not be loaded. Sign in again or check the backend connection.",
+        );
+      }
+
       return {
         connection: getStoredDatabaseConnection(),
       };
@@ -436,6 +455,12 @@ export const api = {
         authenticated: true,
       });
     } catch {
+      if (!isDemoSession()) {
+        throw new Error(
+          "Database schema is not available until your shop is connected.",
+        );
+      }
+
       const localConnection = getStoredDatabaseConnection();
 
       return {
@@ -459,6 +484,12 @@ export const api = {
         body: JSON.stringify(payload),
       });
     } catch {
+      if (!isDemoSession()) {
+        throw new Error(
+          "Database connection could not be saved. Check the backend and try again.",
+        );
+      }
+
       const connection = {
         ...payload,
         updatedAt: new Date().toISOString(),
@@ -499,6 +530,12 @@ export const api = {
         body: JSON.stringify({ message }),
       })) as ChatMessageResponse;
     } catch {
+      if (!isDemoSession()) {
+        throw new Error(
+          "Finish your shop setup before using chat.",
+        );
+      }
+
       return {
         reply: buildLocalChatReply(message),
         sql: null,

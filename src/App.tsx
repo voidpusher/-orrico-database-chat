@@ -5,10 +5,12 @@ import { SupportPage } from "./components/SupportPage";
 import { ChatPage } from "./components/ChatPage";
 import { DashboardPage } from "./components/DashboardPage";
 import { DatabaseConnectionPage } from "./components/DatabaseConnectionPage";
+import { ShopSetupPage } from "./components/ShopSetupPage";
 import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { api } from "./lib/api";
 import {
+  safeJsonParse,
   safeStorageGet,
   safeStorageRemove,
   safeStorageSet,
@@ -20,7 +22,50 @@ type Page =
   | "support"
   | "chat"
   | "dashboard"
-  | "database";
+  | "database"
+  | "setup";
+
+interface SessionUser {
+  id?: string;
+  authProvider?: string;
+  businessName?: string;
+  firstName?: string;
+}
+
+function getShopSetupKey(userId: string) {
+  return `orrico_shop_setup_${userId}`;
+}
+
+function hasCompletedShopSetup(user: SessionUser | null) {
+  if (!user?.id) {
+    return false;
+  }
+
+  if (user.authProvider === "demo") {
+    return true;
+  }
+
+  return Boolean(safeStorageGet(getShopSetupKey(user.id)));
+}
+
+function getNextPageForUser(
+  user: SessionUser | null,
+  lastPage: string | null,
+): Page {
+  if (!user) {
+    return "auth";
+  }
+
+  if (user.authProvider !== "demo" && !hasCompletedShopSetup(user)) {
+    return "setup";
+  }
+
+  return lastPage === "chat" ||
+    lastPage === "dashboard" ||
+    lastPage === "database"
+    ? lastPage
+    : "database";
+}
 
 export default function App() {
   const [currentPage, setCurrentPage] =
@@ -59,11 +104,10 @@ export default function App() {
         );
         setIsLoggedIn(true);
         setCurrentPage(
-          lastPage === "chat" ||
-            lastPage === "dashboard" ||
-            lastPage === "database"
-            ? lastPage
-            : "database",
+          getNextPageForUser(
+            session.user as SessionUser,
+            lastPage,
+          ),
         );
       })
       .catch(() => {
@@ -72,9 +116,17 @@ export default function App() {
       });
   }, []);
 
-  const handleLogin = () => {
+  const handleLogin = (user?: SessionUser) => {
+    const currentUser =
+      user ||
+      safeJsonParse<SessionUser | null>(
+        safeStorageGet("orrico_current_user"),
+        null,
+      );
     setIsLoggedIn(true);
-    setCurrentPage("database");
+    setCurrentPage(
+      getNextPageForUser(currentUser, safeStorageGet("orrico_last_page")),
+    );
   };
 
   const handleLogout = () => {
@@ -89,6 +141,25 @@ export default function App() {
 
   const handleDatabaseConnectionComplete = () => {
     setCurrentPage("chat");
+  };
+
+  const handleShopSetupComplete = (profile: Record<string, string>) => {
+    const currentUser = safeJsonParse<SessionUser | null>(
+      safeStorageGet("orrico_current_user"),
+      null,
+    );
+
+    if (currentUser?.id) {
+      safeStorageSet(
+        getShopSetupKey(currentUser.id),
+        JSON.stringify({
+          ...profile,
+          completedAt: new Date().toISOString(),
+        }),
+      );
+    }
+
+    setCurrentPage("database");
   };
 
   return (
@@ -123,6 +194,12 @@ export default function App() {
         {currentPage === "database" && isLoggedIn && (
           <DatabaseConnectionPage
             onComplete={handleDatabaseConnectionComplete}
+            onLogout={handleLogout}
+          />
+        )}
+        {currentPage === "setup" && isLoggedIn && (
+          <ShopSetupPage
+            onComplete={handleShopSetupComplete}
             onLogout={handleLogout}
           />
         )}

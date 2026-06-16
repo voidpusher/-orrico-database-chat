@@ -63,7 +63,7 @@ interface ResetPasswordForm {
 interface AuthPageProps {
   onBackToHome?: () => void;
   onNavigateToSupport?: () => void;
-  onLogin?: () => void;
+  onLogin?: (user?: Record<string, unknown>) => void;
   initialMode?: "verify" | "reset";
   initialEmail?: string;
   initialToken?: string;
@@ -141,7 +141,7 @@ export function AuthPage({
         "Welcome back! Redirecting to your dashboard...",
       );
       setTimeout(() => {
-        onLogin?.();
+        onLogin?.(session.user as Record<string, unknown>);
       }, 1000);
     } catch (error) {
       setIsLoading(false);
@@ -220,7 +220,7 @@ export function AuthPage({
           "Account created. Redirecting to your dashboard...",
         );
         setTimeout(() => {
-          onLogin?.();
+          onLogin?.(session.user as Record<string, unknown>);
         }, 800);
         return;
       }
@@ -287,7 +287,7 @@ export function AuthPage({
       setIsLoading(false);
       toast.success("Email verified. Redirecting to your dashboard...");
       setTimeout(() => {
-        onLogin?.();
+        onLogin?.(session.user as Record<string, unknown>);
       }, 800);
     } catch (error) {
       setIsLoading(false);
@@ -462,9 +462,9 @@ export function AuthPage({
                 </CardTitle>
                 <CardDescription className="text-base">
                   {authMode === "login" &&
-                    "Sign in to access your retail analytics dashboard"}
+                    "Sign in to continue with your shop, or open the separate demo workspace below"}
                   {authMode === "signup" &&
-                    "Start your journey to smarter business decisions"}
+                    "Create a fresh shop account and start with your own setup"}
                   {authMode === "verify" &&
                     "Enter the verification token to activate your account"}
                   {authMode === "forgot" &&
@@ -475,13 +475,16 @@ export function AuthPage({
                 {isLogin && (
                   <div className="rounded-2xl border border-border/70 bg-muted/60 p-4 text-sm text-left">
                     <p className="text-muted-foreground">
-                      <strong>Demo Account:</strong>
+                      <strong>Separate Demo Workspace:</strong>
                     </p>
                     <p className="text-muted-foreground mt-1">
                       Email: <code className="bg-background px-1 py-0.5 rounded">demo@orrico.com</code>
                     </p>
                     <p className="text-muted-foreground">
                       Password: <code className="bg-background px-1 py-0.5 rounded">demo123</code>
+                    </p>
+                    <p className="mt-2 text-muted-foreground">
+                      Real accounts start with a new shop setup and do not share this sample data.
                     </p>
                   </div>
                 )}
@@ -615,7 +618,7 @@ export function AuthPage({
                           loginForm.handleSubmit(onLoginSubmit)();
                         }}
                       >
-                        Use Demo Account
+                        Open Demo Workspace
                       </Button>
                     </div>
                   </form>
