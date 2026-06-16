@@ -492,21 +492,22 @@ export function importCsvDataset(
       "imported_data",
     );
     const columns = inferColumnTypes(rows, headers);
+    const quotedTableName = `"${normalizedTableName}"`;
     const columnDefinitions = columns
-      .map((column) => `${column.name} ${column.type}`)
+      .map((column) => `"${column.name}" ${column.type}`)
       .join(", ");
 
-    database.exec(`DROP TABLE IF EXISTS ${normalizedTableName}`);
+    database.exec(`DROP TABLE IF EXISTS ${quotedTableName}`);
     database.exec(`
-      CREATE TABLE ${normalizedTableName} (
+      CREATE TABLE ${quotedTableName} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ${columnDefinitions}
       )
     `);
     const placeholders = columns.map(() => "?").join(", ");
     const insertStatement = database.prepare(`
-      INSERT INTO ${normalizedTableName} (${columns
-        .map((column) => column.name)
+      INSERT INTO ${quotedTableName} (${columns
+        .map((column) => `"${column.name}"`)
         .join(", ")})
       VALUES (${placeholders})
     `);

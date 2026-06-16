@@ -276,13 +276,14 @@ async function request(path: string, options: RequestOptions = {}) {
   if (options.authenticated) {
     const token = safeStorageGet("orrico_auth_token");
 
-    if (token) {
+    if (token && token !== LOCAL_DEMO_TOKEN) {
       headers.set("Authorization", `Bearer ${token}`);
     }
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
+    credentials: "include",
     headers,
   });
 

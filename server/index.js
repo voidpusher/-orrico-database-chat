@@ -1,12 +1,46 @@
 import { pathToFileURL } from "node:url";
 import { app } from "./app.js";
 import { checkStoreHealth, getStoreMode } from "./data-store.js";
-import { getRuntimeSummary } from "./runtime.js";
+import { getMissingProductionEnvVars, getRuntimeSummary, isProduction } from "./runtime.js";
+
 const port = Number(process.env.PORT || 4000);
+const DEFAULT_ENCRYPTION_KEY = "local-development-only-orrico-secret-key";
+
+function assertProductionRequirements() {
+  if (!isProduction()) {
+    return;
+  }
+
+  const missing = getMissingProductionEnvVars();
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required production environment variables: ${missing.join(", ")}. Refusing to start.`,
+    );
+  }
+
+  const encryptionKey = String(process.env.APP_ENCRYPTION_KEY || "").trim();
+
+  if (!encryptionKey || encryptionKey === DEFAULT_ENCRYPTION_KEY) {
+    throw new Error(
+      "APP_ENCRYPTION_KEY must be set to a strong secret in production. Refusing to start.",
+    );
+  }
+
+  const storeMode = getStoreMode();
+
+  if (storeMode !== "postgresql") {
+    throw new Error(
+      "DATABASE_URL must be set to a PostgreSQL connection string in production. SQLite is not safe for multi-instance deployments. Refusing to start.",
+    );
+  }
+}
 
 const currentModuleUrl = pathToFileURL(process.argv[1] || "").href;
 
 if (import.meta.url === currentModuleUrl) {
+  assertProductionRequirements();
+
   app.listen(port, async () => {
     const storeHealth = await checkStoreHealth().catch((error) => ({
       ok: false,

@@ -26,7 +26,7 @@ import {
 import { toast } from "sonner";
 import shopkeeperImage from "../assets/2609b7d59d0b4c5c57d1b7fab24a98ad05088a2f.png";
 import { api } from "../lib/api";
-import { safeStorageSet } from "../lib/storage";
+import { safeStorageRemove, safeStorageSet } from "../lib/storage";
 
 interface LoginForm {
   email: string;
@@ -113,7 +113,13 @@ export function AuthPage({
   ]);
 
   const persistSession = (token: string, user: unknown) => {
-    safeStorageSet("orrico_auth_token", token);
+    // Only store the token locally for the offline demo session.
+    // Real server sessions use httpOnly cookies set by the server.
+    if (token === "local-demo-session") {
+      safeStorageSet("orrico_auth_token", token);
+    } else {
+      safeStorageRemove("orrico_auth_token");
+    }
     safeStorageSet(
       "orrico_current_user",
       JSON.stringify(user),

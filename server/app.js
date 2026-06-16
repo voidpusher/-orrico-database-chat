@@ -1,4 +1,7 @@
 import cors from "cors";
+import cookieParser from "cookie-parser";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 import express from "express";
 import crypto from "node:crypto";
 import {
@@ -63,8 +66,35 @@ import {
   sendTransactionalEmail,
 } from "./email-service.js";
 
+const SESSION_COOKIE_NAME = "orrico_session";
+
+const chatRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please slow down." },
+});
+
 export const app = express();
 app.disable("x-powered-by");
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  }),
+);
 
 app.use(
   cors({
@@ -72,6 +102,7 @@ app.use(
     credentials: true,
   }),
 );
+app.use(cookieParser());
 app.use(express.json({ limit: "2mb" }));
 app.use(requestContextMiddleware);
 app.use(requestLoggerMiddleware);
@@ -93,6 +124,20 @@ function sanitizeUser(user) {
     emailVerifiedAt: user.emailVerifiedAt || null,
     emailVerified: Boolean(user.emailVerifiedAt),
   };
+}
+
+function setSessionCookie(response, token) {
+  response.cookie(SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: Number(process.env.SESSION_TTL_HOURS || 24 * 30) * 60 * 60 * 1000,
+    path: "/",
+  });
+}
+
+function clearSessionCookie(response) {
+  response.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
 }
 
 function normalizeConnectionPayload(payload) {
@@ -291,10 +336,12 @@ function clearFailedAuthAttempts(key) {
 }
 
 async function getSessionFromRequest(request) {
+  const cookieToken = request.cookies?.[SESSION_COOKIE_NAME] || null;
   const authorization = request.headers.authorization || "";
-  const token = authorization.startsWith("Bearer ")
+  const bearerToken = authorization.startsWith("Bearer ")
     ? authorization.slice(7)
     : null;
+  const token = cookieToken || bearerToken;
 
   if (!token) {
     return null;
@@ -536,6 +583,10 @@ app.post("/api/auth/signup", async (request, response) => {
   }
   clearFailedAuthAttempts(rateLimit.key);
 
+  if (session) {
+    setSessionCookie(response, session.token);
+  }
+
   response.status(201).json({
     token: session?.token,
     user: sanitizeUser(user),
@@ -630,6 +681,7 @@ app.post("/api/auth/login", async (request, response) => {
       data.sessions.push(session);
       await writeData(data);
       clearFailedAuthAttempts(rateLimit.key);
+      setSessionCookie(response, session.token);
 
       response.json({
         token: session.token,
@@ -672,6 +724,7 @@ app.post("/api/auth/login", async (request, response) => {
   data.sessions.push(session);
   await writeData(data);
   clearFailedAuthAttempts(rateLimit.key);
+  setSessionCookie(response, session.token);
 
   response.json({
     token: session.token,
@@ -790,6 +843,7 @@ app.post("/api/auth/verify-email/confirm", async (request, response) => {
   const session = createSession(user.id);
   data.sessions.push(session);
   await writeData(data);
+  setSessionCookie(response, session.token);
 
   response.json({
     token: session.token,
@@ -930,6 +984,7 @@ app.post("/api/auth/logout", async (request, response) => {
   const data = await readData();
   data.sessions = data.sessions.filter((entry) => entry.token !== token);
   await writeData(data);
+  clearSessionCookie(response);
   response.status(204).end();
 });
 
@@ -1496,7 +1551,7 @@ app.get("/api/chat/history", async (request, response) => {
   response.json({ messages });
 });
 
-app.post("/api/chat/message", async (request, response) => {
+app.post("/api/chat/message", chatRateLimit, async (request, response) => {
   const session = await getSessionFromRequest(request);
 
   if (!session) {

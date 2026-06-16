@@ -47,12 +47,8 @@ export default function App() {
       setCurrentPage("auth");
     }
 
-    const authToken = safeStorageGet("orrico_auth_token");
-
-    if (!authToken) {
-      return;
-    }
-
+    // Always probe the session endpoint — real sessions use httpOnly cookies
+    // (no localStorage token needed). Only the offline demo token is in localStorage.
     api
       .session()
       .then((session) => {
