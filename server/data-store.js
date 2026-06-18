@@ -13,6 +13,7 @@ const PG_TABLES = {
   chatHistory: "orrico_chat_history",
   passwordResetTokens: "orrico_password_reset_tokens",
   emailVerificationTokens: "orrico_email_verification_tokens",
+  auditLog: "orrico_audit_log",
 };
 
 const defaultData = {
@@ -22,6 +23,7 @@ const defaultData = {
   chatHistory: [],
   passwordResetTokens: [],
   emailVerificationTokens: [],
+  auditLog: [],
 };
 
 function isVercelRuntime() {
@@ -100,6 +102,7 @@ function normalizeDataShape(data) {
     emailVerificationTokens: Array.isArray(data?.emailVerificationTokens)
       ? data.emailVerificationTokens
       : [],
+    auditLog: Array.isArray(data?.auditLog) ? data.auditLog : [],
   };
 }
 
@@ -180,6 +183,15 @@ function openSqliteDatabase() {
       expires_at TEXT NOT NULL,
       consumed_at TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      event TEXT NOT NULL,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL
     );
   `);
   ensureSqliteColumn(
@@ -306,6 +318,24 @@ function mapSqliteTokenRows(database, tableName) {
   }));
 }
 
+function mapSqliteAuditLog(database) {
+  const rows = database.prepare(`
+    SELECT id, user_id, event, ip, user_agent, created_at
+    FROM audit_log
+    ORDER BY created_at DESC
+    LIMIT 1000
+  `).all();
+
+  return rows.map((row) => ({
+    id: row.id,
+    userId: row.user_id || undefined,
+    event: row.event,
+    ip: row.ip || undefined,
+    userAgent: row.user_agent || undefined,
+    createdAt: row.created_at,
+  }));
+}
+
 function getExistingSqliteUserCount(database) {
   const row = database
     .prepare(`SELECT COUNT(*) AS total FROM users`)
@@ -327,6 +357,11 @@ function persistSqliteSnapshot(database, nextData) {
       DELETE FROM database_connections;
       DELETE FROM sessions;
       DELETE FROM users;
+    `);
+
+    const insertAuditEntry = database.prepare(`
+      INSERT OR IGNORE INTO audit_log (id, user_id, event, ip, user_agent, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     const insertUser = database.prepare(`
@@ -454,6 +489,17 @@ function persistSqliteSnapshot(database, nextData) {
       );
     }
 
+    for (const entry of data.auditLog) {
+      insertAuditEntry.run(
+        entry.id,
+        entry.userId || null,
+        entry.event,
+        entry.ip || null,
+        entry.userAgent || null,
+        entry.createdAt,
+      );
+    }
+
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");
@@ -494,6 +540,7 @@ function readSqliteData() {
         database,
         "email_verification_tokens",
       ),
+      auditLog: mapSqliteAuditLog(database),
     };
   } finally {
     database.close();
@@ -565,6 +612,15 @@ async function initializePostgres(client) {
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       consumed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS ${PG_TABLES.auditLog} (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      event TEXT NOT NULL,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL
     );
   `);
 }
@@ -730,6 +786,24 @@ async function persistPostgresSnapshot(client, nextData) {
       );
     }
 
+    for (const entry of data.auditLog) {
+      await client.query(
+        `
+          INSERT INTO ${PG_TABLES.auditLog} (id, user_id, event, ip, user_agent, created_at)
+          VALUES ($1,$2,$3,$4,$5,$6)
+          ON CONFLICT (id) DO NOTHING
+        `,
+        [
+          entry.id,
+          entry.userId || null,
+          entry.event,
+          entry.ip || null,
+          entry.userAgent || null,
+          entry.createdAt,
+        ],
+      );
+    }
+
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -770,6 +844,7 @@ async function readPostgresData() {
       chatHistoryResult,
       passwordResetTokensResult,
       emailVerificationTokensResult,
+      auditLogResult,
     ] = await Promise.all([
       client.query(`
         SELECT
@@ -811,6 +886,12 @@ async function readPostgresData() {
         SELECT token, user_id, created_at, expires_at, consumed_at
         FROM ${PG_TABLES.emailVerificationTokens}
         ORDER BY created_at ASC
+      `),
+      client.query(`
+        SELECT id, user_id, event, ip, user_agent, created_at
+        FROM ${PG_TABLES.auditLog}
+        ORDER BY created_at DESC
+        LIMIT 1000
       `),
     ]);
 
@@ -861,6 +942,14 @@ async function readPostgresData() {
           expiresAt: row.expires_at,
           consumedAt: row.consumed_at || undefined,
         })),
+      auditLog: auditLogResult.rows.map((row) => ({
+        id: row.id,
+        userId: row.user_id || undefined,
+        event: row.event,
+        ip: row.ip || undefined,
+        userAgent: row.user_agent || undefined,
+        createdAt: row.created_at,
+      })),
     };
   } finally {
     await client.end();
@@ -896,6 +985,51 @@ export async function writeData(nextData) {
 
   try {
     persistSqliteSnapshot(database, nextData);
+  } finally {
+    database.close();
+  }
+}
+
+export async function appendAuditEntry(entry) {
+  if (usePostgresStore()) {
+    const client = await openPostgresClient();
+
+    try {
+      await client.query(
+        `INSERT INTO ${PG_TABLES.auditLog} (id, user_id, event, ip, user_agent, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
+        [
+          entry.id,
+          entry.userId || null,
+          entry.event,
+          entry.ip || null,
+          entry.userAgent || null,
+          entry.createdAt,
+        ],
+      );
+    } finally {
+      await client.end();
+    }
+
+    return;
+  }
+
+  const database = openSqliteDatabase();
+
+  try {
+    database
+      .prepare(
+        `INSERT OR IGNORE INTO audit_log (id, user_id, event, ip, user_agent, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        entry.id,
+        entry.userId || null,
+        entry.event,
+        entry.ip || null,
+        entry.userAgent || null,
+        entry.createdAt,
+      );
   } finally {
     database.close();
   }

@@ -6,6 +6,7 @@ import { ChatPage } from "./components/ChatPage";
 import { DashboardPage } from "./components/DashboardPage";
 import { DatabaseConnectionPage } from "./components/DatabaseConnectionPage";
 import { ShopSetupPage } from "./components/ShopSetupPage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { api } from "./lib/api";
@@ -92,7 +93,7 @@ export default function App() {
       setCurrentPage("auth");
     }
 
-    // Always probe the session endpoint — real sessions use httpOnly cookies
+    // Always probe the session endpoint - real sessions use httpOnly cookies
     // (no localStorage token needed). Only the offline demo token is in localStorage.
     api
       .session()
@@ -163,81 +164,83 @@ export default function App() {
   };
 
   return (
-    <ThemeProvider>
-      <div className="min-h-screen bg-background">
-        {currentPage === "landing" && (
-          <LandingPage
-            onNavigateToAuth={() => setCurrentPage("auth")}
-            onNavigateToSupport={() =>
-              setCurrentPage("support")
-            }
-          />
-        )}
-        {currentPage === "auth" && (
-          <AuthPage
-            initialMode={authContext.mode}
-            initialEmail={authContext.email}
-            initialToken={authContext.token}
-            onBackToHome={() => setCurrentPage("landing")}
-            onNavigateToSupport={() =>
-              setCurrentPage("support")
-            }
-            onLogin={handleLogin}
-          />
-        )}
-        {currentPage === "support" && (
-          <SupportPage
-            onBackToHome={() => setCurrentPage("landing")}
-            onNavigateToAuth={() => setCurrentPage("auth")}
-          />
-        )}
-        {currentPage === "database" && isLoggedIn && (
-          <DatabaseConnectionPage
-            onComplete={handleDatabaseConnectionComplete}
-            onLogout={handleLogout}
-          />
-        )}
-        {currentPage === "setup" && isLoggedIn && (
-          <ShopSetupPage
-            onComplete={handleShopSetupComplete}
-            onLogout={handleLogout}
-          />
-        )}
-        {currentPage === "chat" && isLoggedIn && (
-          <ChatPage
-            onLogout={handleLogout}
-            onNavigateToSupport={() =>
-              setCurrentPage("support")
-            }
-            onNavigateToDashboard={() => {
-              safeStorageSet(
-                "orrico_last_page",
-                "dashboard",
-              );
-              setCurrentPage("dashboard");
-            }}
-            onNavigateToLanding={() =>
-              setCurrentPage("landing")
-            }
-          />
-        )}
-        {currentPage === "dashboard" && isLoggedIn && (
-          <DashboardPage
-            onLogout={handleLogout}
-            onNavigateToSupport={() =>
-              setCurrentPage("support")
-            }
-            onNavigateToChat={() => {
-              safeStorageSet("orrico_last_page", "chat");
-              setCurrentPage("chat");
-            }}
-            onNavigateToLanding={() =>
-              setCurrentPage("landing")
-            }
-          />
-        )}
-        <Toaster />
-      </div>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <div className="min-h-screen bg-background">
+          {currentPage === "landing" && (
+            <LandingPage
+              onNavigateToAuth={() => setCurrentPage("auth")}
+              onNavigateToSupport={() =>
+                setCurrentPage("support")
+              }
+            />
+          )}
+          {currentPage === "auth" && (
+            <AuthPage
+              initialMode={authContext.mode}
+              initialEmail={authContext.email}
+              initialToken={authContext.token}
+              onBackToHome={() => setCurrentPage("landing")}
+              onNavigateToSupport={() =>
+                setCurrentPage("support")
+              }
+              onLogin={handleLogin}
+            />
+          )}
+          {currentPage === "support" && (
+            <SupportPage
+              onBackToHome={() => setCurrentPage("landing")}
+              onNavigateToAuth={() => setCurrentPage("auth")}
+            />
+          )}
+          {currentPage === "database" && isLoggedIn && (
+            <DatabaseConnectionPage
+              onComplete={handleDatabaseConnectionComplete}
+              onLogout={handleLogout}
+            />
+          )}
+          {currentPage === "setup" && isLoggedIn && (
+            <ShopSetupPage
+              onComplete={handleShopSetupComplete}
+              onLogout={handleLogout}
+            />
+          )}
+          {currentPage === "chat" && isLoggedIn && (
+            <ChatPage
+              onLogout={handleLogout}
+              onNavigateToSupport={() =>
+                setCurrentPage("support")
+              }
+              onNavigateToDashboard={() => {
+                safeStorageSet(
+                  "orrico_last_page",
+                  "dashboard",
+                );
+                setCurrentPage("dashboard");
+              }}
+              onNavigateToLanding={() =>
+                setCurrentPage("landing")
+              }
+            />
+          )}
+          {currentPage === "dashboard" && isLoggedIn && (
+            <DashboardPage
+              onLogout={handleLogout}
+              onNavigateToSupport={() =>
+                setCurrentPage("support")
+              }
+              onNavigateToChat={() => {
+                safeStorageSet("orrico_last_page", "chat");
+                setCurrentPage("chat");
+              }}
+              onNavigateToLanding={() =>
+                setCurrentPage("landing")
+              }
+            />
+          )}
+          <Toaster />
+        </div>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

@@ -356,13 +356,17 @@ export async function getDashboardSummary(connection) {
   };
 }
 
-export async function getDashboardDetails(connection) {
+export async function getDashboardDetails(connection, customerLimit = 200) {
   const overview = await getSchemaOverviewForConnection(connection);
 
   if (!hasRetailSchema(overview.schema)) {
     return buildUnavailableDashboardResponse(overview);
   }
 
+  const safeCustomerLimit = Math.max(
+    1,
+    Math.min(Number.parseInt(String(customerLimit || 200), 10) || 200, 200),
+  );
   const [productRows, customerRows] = await Promise.all([
     executeReadOnlyQuery(
       connection,
@@ -396,6 +400,7 @@ export async function getDashboardDetails(connection) {
         LEFT JOIN orders o ON o.customer_id = c.id
         GROUP BY c.id, c.name, c.email, c.phone
         ORDER BY MAX(o.ordered_at) DESC, COALESCE(SUM(o.total_amount), 0) DESC, c.name ASC
+        LIMIT ${safeCustomerLimit}
       `,
     ),
   ]);
@@ -452,8 +457,8 @@ export async function getDashboardDetails(connection) {
   };
 }
 
-export async function getDashboardCustomers(connection) {
-  const details = await getDashboardDetails(connection);
+export async function getDashboardCustomers(connection, limit = 200) {
+  const details = await getDashboardDetails(connection, limit);
 
   return {
     available: details.available,

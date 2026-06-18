@@ -39,6 +39,7 @@ import {
   getDashboardSummary,
 } from "./dashboard-service.js";
 import {
+  appendAuditEntry,
   checkStoreHealth,
   getStoreInfo,
   getStoreMode,
@@ -123,6 +124,22 @@ function sanitizeUser(user) {
     createdAt: user.createdAt,
     emailVerifiedAt: user.emailVerifiedAt || null,
     emailVerified: Boolean(user.emailVerifiedAt),
+  };
+}
+
+function createAuditEntry(request, event, userId) {
+  const forwardedFor = request.headers["x-forwarded-for"];
+  const ip = Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : String(forwardedFor || request.ip || "unknown").split(",")[0].trim();
+
+  return {
+    id: crypto.randomUUID(),
+    userId: userId || undefined,
+    event,
+    ip,
+    userAgent: request.headers["user-agent"] || undefined,
+    createdAt: new Date().toISOString(),
   };
 }
 
@@ -594,6 +611,8 @@ app.post("/api/auth/signup", async (request, response) => {
     setSessionCookie(response, session.token);
   }
 
+  appendAuditEntry(createAuditEntry(request, "signup_success", user.id)).catch(() => undefined);
+
   response.status(201).json({
     token: session?.token,
     user: sanitizeUser(user),
@@ -727,11 +746,13 @@ app.post("/api/auth/login", async (request, response) => {
     return;
   }
 
+  data.sessions = data.sessions.filter((entry) => entry.userId !== user.id);
   const session = createSession(user.id);
   data.sessions.push(session);
   await writeData(data);
   clearFailedAuthAttempts(rateLimit.key);
   setSessionCookie(response, session.token);
+  appendAuditEntry(createAuditEntry(request, "login_success", user.id)).catch(() => undefined);
 
   response.json({
     token: session.token,
@@ -851,6 +872,7 @@ app.post("/api/auth/verify-email/confirm", async (request, response) => {
   data.sessions.push(session);
   await writeData(data);
   setSessionCookie(response, session.token);
+  appendAuditEntry(createAuditEntry(request, "email_verified", user.id)).catch(() => undefined);
 
   response.json({
     token: session.token,
@@ -957,6 +979,7 @@ app.post("/api/auth/password-reset/confirm", async (request, response) => {
     (entry) => entry.userId !== user.id,
   );
   await writeData(data);
+  appendAuditEntry(createAuditEntry(request, "password_reset", user.id)).catch(() => undefined);
 
   response.json({
     ok: true,
@@ -1353,6 +1376,7 @@ app.get("/api/dashboard/customers", async (request, response) => {
   try {
     const customers = await getDashboardCustomers(
       prepareConnectionForUse(connection),
+      request.query.limit,
     );
     response.json(customers);
   } catch (error) {
