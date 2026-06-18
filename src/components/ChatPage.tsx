@@ -32,6 +32,7 @@ interface ChatPageProps {
   onNavigateToSupport: () => void;
   onNavigateToDashboard: () => void;
   onNavigateToLanding?: () => void;
+  onNavigateToPricing?: () => void;
 }
 
 interface Message {
@@ -524,6 +525,7 @@ export function ChatPage({
   onNavigateToSupport,
   onNavigateToDashboard,
   onNavigateToLanding,
+  onNavigateToPricing,
 }: ChatPageProps) {
   const [messages, setMessages] = useState<Message[]>([
     DEFAULT_WELCOME_MESSAGE,
@@ -897,11 +899,25 @@ export function ChatPage({
       };
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Chat response could not be loaded.",
-      );
+      const details = (error as { details?: { upgradeRequired?: boolean } })?.details;
+      if (details?.upgradeRequired && onNavigateToPricing) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            type: "ai",
+            content: "⚠️ You've used all your chat messages for this month. Upgrade your plan to continue.",
+            timestamp: new Date(),
+          },
+        ]);
+        setTimeout(onNavigateToPricing, 1800);
+      } else {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Chat response could not be loaded.",
+        );
+      }
     } finally {
       setIsTyping(false);
     }

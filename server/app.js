@@ -16,6 +16,19 @@ import {
   verifyPassword,
 } from "./auth.js";
 import { buildChatReply } from "./chat-engine.js";
+import { buildLlmChatReply } from "./llm-chat-engine.js";
+import { buildRagChatReply, warmupRagEngine } from "./rag-engine.js";
+import {
+  assertMessageQuota,
+  createCheckoutSession,
+  createPortalSession,
+  extractSubscriptionUpdate,
+  getMonthlyMessageCount,
+  getPlanForUser,
+  isStripeEnabled,
+  parseWebhookEvent,
+  PLANS,
+} from "./billing.js";
 import {
   createRetailOrder,
   createRetailProduct,
@@ -104,7 +117,16 @@ app.use(
   }),
 );
 app.use(cookieParser());
-app.use(express.json({ limit: "2mb" }));
+app.use(
+  express.json({
+    limit: "2mb",
+    verify: (req, _res, buf) => {
+      if (req.originalUrl === "/api/billing/webhook") {
+        req.rawBody = buf;
+      }
+    },
+  }),
+);
 app.use(requestContextMiddleware);
 app.use(requestLoggerMiddleware);
 
@@ -1705,12 +1727,27 @@ app.post("/api/chat/message", chatRateLimit, async (request, response) => {
     });
     return;
   }
+
+  try {
+    assertMessageQuota(session.data, session.user);
+  } catch (quotaError) {
+    response.status(402).json({
+      error: quotaError.message,
+      upgradeRequired: true,
+      currentPlan: quotaError.currentPlan,
+    });
+    return;
+  }
+
   let result;
 
   try {
-    result = await buildChatReply(String(message), {
-      connection: prepareConnectionForUse(connection),
-    });
+    const preparedConnection = prepareConnectionForUse(connection);
+    if (process.env.ANTHROPIC_API_KEY) {
+      result = await buildLlmChatReply(String(message), preparedConnection);
+    } else {
+      result = await buildRagChatReply(String(message), { connection: preparedConnection });
+    }
   } catch (error) {
     response.status(400).json({
       error:
@@ -1732,6 +1769,212 @@ app.post("/api/chat/message", chatRateLimit, async (request, response) => {
   await writeData(session.data);
 
   response.json(result);
+});
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+app.get("/api/billing/status", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+  if (!session) { response.status(401).json({ error: "Unauthorized." }); return; }
+
+  const plan = getPlanForUser(session.user);
+  const used = getMonthlyMessageCount(session.data, session.user.id);
+
+  response.json({
+    stripeEnabled: isStripeEnabled(),
+    plan: {
+      key: plan.key,
+      name: plan.name,
+      priceMonthly: plan.priceMonthly,
+      features: plan.features,
+    },
+    usage: {
+      messagesThisMonth: used,
+      messagesLimit: plan.monthlyMessages === Infinity ? null : plan.monthlyMessages,
+      dbConnectionsLimit: plan.dbConnections === Infinity ? null : plan.dbConnections,
+    },
+    subscription: {
+      customerId: session.user.stripeCustomerId || null,
+      subscriptionId: session.user.stripeSubscriptionId || null,
+      status: session.user.stripeSubscriptionStatus || "active",
+    },
+    plans: Object.values(PLANS).map((p) => ({
+      key: p.key,
+      name: p.name,
+      priceMonthly: p.priceMonthly,
+      features: p.features,
+      monthlyMessages: p.monthlyMessages === Infinity ? null : p.monthlyMessages,
+      dbConnections: p.dbConnections === Infinity ? null : p.dbConnections,
+    })),
+  });
+});
+
+app.post("/api/billing/checkout", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+  if (!session) { response.status(401).json({ error: "Unauthorized." }); return; }
+
+  if (!isStripeEnabled()) {
+    response.status(503).json({ error: "Billing is not configured on this server." });
+    return;
+  }
+
+  const { planKey } = request.body || {};
+  if (!planKey || !PLANS[planKey] || planKey === "free") {
+    response.status(400).json({ error: "Valid paid plan key is required." });
+    return;
+  }
+
+  const appBase = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
+
+  try {
+    const { url, customerId } = await createCheckoutSession(
+      session.user,
+      planKey,
+      `${appBase}/billing/success?plan=${planKey}`,
+      `${appBase}/billing/cancel`,
+    );
+
+    if (customerId && customerId !== session.user.stripeCustomerId) {
+      session.user.stripeCustomerId = customerId;
+      await writeData(session.data);
+    }
+
+    response.json({ url });
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : "Checkout failed." });
+  }
+});
+
+app.post("/api/billing/portal", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+  if (!session) { response.status(401).json({ error: "Unauthorized." }); return; }
+
+  if (!isStripeEnabled()) {
+    response.status(503).json({ error: "Billing is not configured on this server." });
+    return;
+  }
+
+  const customerId = session.user.stripeCustomerId;
+  if (!customerId) {
+    response.status(400).json({ error: "No billing account found. Subscribe first." });
+    return;
+  }
+
+  const appBase = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
+
+  try {
+    const { url } = await createPortalSession(customerId, `${appBase}/dashboard`);
+    response.json({ url });
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : "Portal session failed." });
+  }
+});
+
+app.post("/api/billing/webhook", async (request, response) => {
+  const sig = request.headers["stripe-signature"] || "";
+  const rawBody = request.rawBody;
+
+  if (!rawBody) {
+    response.status(400).json({ error: "Missing raw body." });
+    return;
+  }
+
+  let event;
+  try {
+    event = parseWebhookEvent(rawBody, sig);
+  } catch (error) {
+    response.status(400).json({ error: `Webhook signature verification failed: ${error.message}` });
+    return;
+  }
+
+  const SUBSCRIPTION_EVENTS = new Set([
+    "customer.subscription.created",
+    "customer.subscription.updated",
+    "customer.subscription.deleted",
+  ]);
+
+  if (SUBSCRIPTION_EVENTS.has(event.type)) {
+    const { userId, customerId, planKey, status, subscriptionId } = extractSubscriptionUpdate(event);
+
+    const data = await readData();
+    const user = userId
+      ? data.users.find((u) => u.id === userId)
+      : data.users.find((u) => u.stripeCustomerId === customerId);
+
+    if (user) {
+      user.stripeCustomerId = customerId;
+      user.stripeSubscriptionId = subscriptionId;
+      user.stripePlanKey = status === "canceled" || status === "unpaid" ? "free" : planKey;
+      user.stripeSubscriptionStatus = status;
+      await writeData(data);
+      appendAuditEntry(createAuditEntry(request, `billing_${event.type.replace("customer.subscription.", "")}`, user.id)).catch(() => undefined);
+    }
+  }
+
+  response.json({ received: true });
+});
+
+// Pre-warm the local RAG embedding model so first chat message has no cold-start delay
+warmupRagEngine();
+
+app.get("/api/account/export", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const { user, data } = session;
+
+  const userSessions = data.sessions.filter((s) => s.userId === user.id).map((s) => ({
+    createdAt: s.createdAt,
+    expiresAt: s.expiresAt,
+  }));
+
+  const chatHistory = data.chatHistory
+    .filter((entry) => entry.userId === user.id)
+    .map((entry) => ({
+      message: entry.message,
+      reply: entry.reply,
+      createdAt: entry.createdAt,
+    }));
+
+  const connection = data.databaseConnections.find((c) => c.userId === user.id) || null;
+
+  response.json({
+    exportedAt: new Date().toISOString(),
+    user: sanitizeUser(user),
+    sessions: userSessions,
+    chatHistory,
+    databaseConnection: sanitizeConnection(connection),
+  });
+});
+
+app.delete("/api/account", async (request, response) => {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    response.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const { user, data } = session;
+
+  data.users = data.users.filter((u) => u.id !== user.id);
+  data.sessions = data.sessions.filter((s) => s.userId !== user.id);
+  data.chatHistory = data.chatHistory.filter((entry) => entry.userId !== user.id);
+  data.databaseConnections = data.databaseConnections.filter((c) => c.userId !== user.id);
+  data.emailVerificationTokens = data.emailVerificationTokens.filter((t) => t.userId !== user.id);
+  data.passwordResetTokens = data.passwordResetTokens.filter((t) => t.userId !== user.id);
+
+  await writeData(data);
+  clearSessionCookie(response);
+  appendAuditEntry(createAuditEntry(request, "account_deleted", user.id)).catch(() => undefined);
+
+  response.json({ ok: true, message: "Account and all associated data deleted." });
 });
 
 app.use(errorHandler);

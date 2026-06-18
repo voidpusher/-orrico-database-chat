@@ -1,0 +1,13 @@
+node_modules
+dist
+.parcel-cache
+server/data
+backups
+*.log
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+*.md
+certs

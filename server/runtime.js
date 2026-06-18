@@ -43,6 +43,10 @@ export function getMissingProductionEnvVars() {
     requiredVariables.push("EMAIL_FROM", "RESEND_API_KEY");
   }
 
+  if (process.env.STRIPE_SECRET_KEY) {
+    requiredVariables.push("STRIPE_WEBHOOK_SECRET", "STRIPE_PRO_PRICE_ID");
+  }
+
   return requiredVariables.filter(
     (name) => !String(process.env[name] || "").trim(),
   );

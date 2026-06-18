@@ -6,6 +6,7 @@ import { ChatPage } from "./components/ChatPage";
 import { DashboardPage } from "./components/DashboardPage";
 import { DatabaseConnectionPage } from "./components/DatabaseConnectionPage";
 import { ShopSetupPage } from "./components/ShopSetupPage";
+import { PricingPage } from "./components/PricingPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./components/ThemeProvider";
@@ -24,7 +25,8 @@ type Page =
   | "chat"
   | "dashboard"
   | "database"
-  | "setup";
+  | "setup"
+  | "pricing";
 
 interface SessionUser {
   id?: string;
@@ -205,6 +207,14 @@ export default function App() {
               onLogout={handleLogout}
             />
           )}
+          {currentPage === "pricing" && isLoggedIn && (
+            <PricingPage
+              onBack={() => setCurrentPage(
+                (safeStorageGet("orrico_last_page") as Page) || "chat"
+              )}
+              onLogout={handleLogout}
+            />
+          )}
           {currentPage === "chat" && isLoggedIn && (
             <ChatPage
               onLogout={handleLogout}
@@ -221,6 +231,7 @@ export default function App() {
               onNavigateToLanding={() =>
                 setCurrentPage("landing")
               }
+              onNavigateToPricing={() => setCurrentPage("pricing")}
             />
           )}
           {currentPage === "dashboard" && isLoggedIn && (

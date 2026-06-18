@@ -325,6 +325,23 @@ async function request(path: string, options: RequestOptions = {}) {
   return data;
 }
 
+export interface BillingPlan {
+  key: string;
+  name: string;
+  priceMonthly: number;
+  features: string[];
+  monthlyMessages: number | null;
+  dbConnections: number | null;
+}
+
+export interface BillingStatusResponse {
+  stripeEnabled: boolean;
+  plan: { key: string; name: string; priceMonthly: number; features: string[] };
+  usage: { messagesThisMonth: number; messagesLimit: number | null; dbConnectionsLimit: number | null };
+  subscription: { customerId: string | null; subscriptionId: string | null; status: string };
+  plans: BillingPlan[];
+}
+
 export const api = {
   health() {
     return request("/health").catch(() => ({
@@ -640,6 +657,22 @@ export const api = {
         name: string;
       };
     }>;
+  },
+  billingStatus(): Promise<BillingStatusResponse> {
+    return request("/billing/status", { authenticated: true }) as Promise<BillingStatusResponse>;
+  },
+  billingCheckout(planKey: string): Promise<{ url: string }> {
+    return request("/billing/checkout", {
+      method: "POST",
+      authenticated: true,
+      body: JSON.stringify({ planKey }),
+    }) as Promise<{ url: string }>;
+  },
+  billingPortal(): Promise<{ url: string }> {
+    return request("/billing/portal", {
+      method: "POST",
+      authenticated: true,
+    }) as Promise<{ url: string }>;
   },
   createDashboardOrder(payload: CreateDashboardOrderPayload) {
     return request("/dashboard/orders", {

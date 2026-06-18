@@ -41,11 +41,10 @@ const currentModuleUrl = pathToFileURL(process.argv[1] || "").href;
 if (import.meta.url === currentModuleUrl) {
   assertProductionRequirements();
 
-  app.listen(port, async () => {
+  const server = app.listen(port, async () => {
     const storeHealth = await checkStoreHealth().catch((error) => ({
       ok: false,
-      error:
-        error instanceof Error ? error.message : "Store check failed.",
+      error: error instanceof Error ? error.message : "Store check failed.",
     }));
     const runtime = getRuntimeSummary({
       storeMode: getStoreMode(),
@@ -61,5 +60,42 @@ if (import.meta.url === currentModuleUrl) {
         runtime,
       }),
     );
+  });
+
+  // Graceful shutdown — finish in-flight requests before exiting
+  let shuttingDown = false;
+
+  function shutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    console.log(JSON.stringify({ level: "info", event: "shutdown_initiated", signal }));
+
+    server.close((err) => {
+      if (err) {
+        console.error(JSON.stringify({ level: "error", event: "shutdown_error", error: err.message }));
+        process.exit(1);
+      }
+      console.log(JSON.stringify({ level: "info", event: "shutdown_complete" }));
+      process.exit(0);
+    });
+
+    // Force-kill if shutdown takes longer than 15s
+    setTimeout(() => {
+      console.error(JSON.stringify({ level: "error", event: "shutdown_timeout" }));
+      process.exit(1);
+    }, 15_000).unref();
+  }
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT",  () => shutdown("SIGINT"));
+
+  process.on("uncaughtException", (err) => {
+    console.error(JSON.stringify({ level: "fatal", event: "uncaught_exception", error: err.message, stack: err.stack }));
+    shutdown("uncaughtException");
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    console.error(JSON.stringify({ level: "fatal", event: "unhandled_rejection", reason: String(reason) }));
   });
 }

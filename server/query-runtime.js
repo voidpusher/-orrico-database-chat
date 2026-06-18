@@ -32,6 +32,12 @@ export async function getSchemaOverviewForConnection(connection) {
   return getSqliteSchemaOverview(connection);
 }
 
+const SLOW_QUERY_THRESHOLD_MS = 500;
+
+function logSlowQuery(sql, durationMs) {
+  console.warn(`[slow-query] ${durationMs}ms — ${sql.slice(0, 120).replace(/\s+/g, " ")}`);
+}
+
 export async function executeReadOnlyQuery(connection, sql) {
   const normalizedSql = String(sql || "").trim();
 
@@ -40,6 +46,10 @@ export async function executeReadOnlyQuery(connection, sql) {
   ) {
     throw new Error("Only read-only SELECT queries are allowed.");
   }
+
+  const start = Date.now();
+
+  let rows;
 
   if (
     connection &&
@@ -61,13 +71,11 @@ export async function executeReadOnlyQuery(connection, sql) {
 
     try {
       const result = await client.query(normalizedSql);
-      return result.rows;
+      rows = result.rows;
     } finally {
       await client.end();
     }
-  }
-
-  if (
+  } else if (
     connection &&
     connection.databaseType === "mysql"
   ) {
@@ -84,18 +92,25 @@ export async function executeReadOnlyQuery(connection, sql) {
     });
 
     try {
-      const [rows] = await client.query(normalizedSql);
-      return rows;
+      const [result] = await client.query(normalizedSql);
+      rows = result;
     } finally {
       await client.end();
     }
+  } else {
+    const { database } = openRetailDatabase(connection);
+
+    try {
+      rows = database.prepare(normalizedSql).all();
+    } finally {
+      database.close();
+    }
   }
 
-  const { database } = openRetailDatabase(connection);
-
-  try {
-    return database.prepare(normalizedSql).all();
-  } finally {
-    database.close();
+  const duration = Date.now() - start;
+  if (duration >= SLOW_QUERY_THRESHOLD_MS) {
+    logSlowQuery(normalizedSql, duration);
   }
+
+  return rows;
 }
