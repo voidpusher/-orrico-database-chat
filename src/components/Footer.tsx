@@ -8,9 +8,10 @@ import { Logo } from "./Logo";
 
 interface FooterProps {
   onSupportClick?: () => void;
+  onPricingClick?: () => void;
 }
 
-export function Footer({ onSupportClick }: FooterProps) {
+export function Footer({ onSupportClick, onPricingClick }: FooterProps) {
   const footerSections = [
     {
       title: "Product",
@@ -86,20 +87,28 @@ export function Footer({ onSupportClick }: FooterProps) {
               <h4 className="font-semibold">{section.title}</h4>
               <ul className="space-y-2">
                 {section.links.map((link) => {
-                  const isSupportLink =
-                    link === "Help Center" || link === "Contact";
+                  const isSupportLink = link === "Help Center" || link === "Contact";
+                  const isPricingLink = link === "Pricing";
 
                   return (
                     <li key={link}>
-                      <button
-                        type="button"
-                        onClick={
-                          isSupportLink ? onSupportClick : undefined
-                        }
-                        className="text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
-                      >
-                        {link}
-                      </button>
+                      {isPricingLink ? (
+                        <a
+                          href="#pricing"
+                          onClick={onPricingClick}
+                          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {link}
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={isSupportLink ? onSupportClick : undefined}
+                          className="text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
+                        >
+                          {link}
+                        </button>
+                      )}
                     </li>
                   );
                 })}

@@ -3,6 +3,7 @@ import { Hero } from "./Hero";
 import { Features } from "./Features";
 import { HowItWorks } from "./HowItWorks";
 import { ChatDemo } from "./ChatDemo";
+import { LandingPricing } from "./LandingPricing";
 import { CTA } from "./CTA";
 import { Footer } from "./Footer";
 
@@ -14,7 +15,7 @@ interface LandingPageProps {
 export function LandingPage({ onNavigateToAuth, onNavigateToSupport }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      <Header 
+      <Header
         onSignInClick={onNavigateToAuth}
         onGetStartedClick={onNavigateToAuth}
         onSupportClick={onNavigateToSupport}
@@ -24,6 +25,7 @@ export function LandingPage({ onNavigateToAuth, onNavigateToSupport }: LandingPa
         <Features />
         <HowItWorks />
         <ChatDemo />
+        <LandingPricing onGetStartedClick={onNavigateToAuth} />
         <CTA onGetStartedClick={onNavigateToAuth} />
       </main>
       <Footer onSupportClick={onNavigateToSupport} />

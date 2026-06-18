@@ -25,7 +25,10 @@ export function Header({ onSignInClick, onGetStartedClick, onSupportClick }: Hea
           <a href="#demo" className="text-muted-foreground hover:text-foreground transition-colors">
             Demo
           </a>
-          <button 
+          <a href="#pricing" className="text-muted-foreground hover:text-foreground transition-colors">
+            Pricing
+          </a>
+          <button
             onClick={onSupportClick}
             className="text-muted-foreground hover:text-foreground transition-colors"
           >
